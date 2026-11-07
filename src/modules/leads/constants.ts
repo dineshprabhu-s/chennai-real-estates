@@ -1,12 +1,37 @@
-import type { LeadStatus } from "@/types/lead";
+import type { LeadSource, LeadStatus } from "@/types/lead";
 
 export const leadStatusLabels: Record<LeadStatus, string> = {
   new: "New",
   contacted: "Contacted",
-  closed: "Closed",
+  "visit-scheduled": "Visit scheduled",
+  negotiation: "Negotiation",
+  converted: "Converted",
+  "closed-lost": "Closed / lost",
 };
 
-export const leadPipeline = [
+export const leadStatusOptions: ReadonlyArray<{
+  value: LeadStatus;
+  label: string;
+}> = [
+  { value: "new", label: leadStatusLabels.new },
+  { value: "contacted", label: leadStatusLabels.contacted },
+  { value: "visit-scheduled", label: leadStatusLabels["visit-scheduled"] },
+  { value: "negotiation", label: leadStatusLabels.negotiation },
+  { value: "converted", label: leadStatusLabels.converted },
+  { value: "closed-lost", label: leadStatusLabels["closed-lost"] },
+];
+
+export const leadSourceLabels: Record<LeadSource, string> = {
+  "website-form": "Website form",
+  "property-enquiry": "Property enquiry",
+  whatsapp: "WhatsApp",
+  phone: "Phone",
+};
+
+export const leadStatsOrder: ReadonlyArray<{
+  status: LeadStatus;
+  description: string;
+}> = [
   {
     status: "new",
     description: "Enquiries awaiting a first response.",
@@ -16,7 +41,24 @@ export const leadPipeline = [
     description: "Conversations already in progress.",
   },
   {
-    status: "closed",
-    description: "Enquiries that have run their course.",
+    status: "visit-scheduled",
+    description: "Customers with a property visit arranged.",
   },
-] satisfies ReadonlyArray<{ status: LeadStatus; description: string }>;
+  {
+    status: "negotiation",
+    description: "Active discussions about price or terms.",
+  },
+  {
+    status: "converted",
+    description: "Enquiries that became a completed deal.",
+  },
+  {
+    status: "closed-lost",
+    description: "Enquiries that did not proceed.",
+  },
+];
+
+/**
+ * @deprecated Use leadStatsOrder. Kept briefly for the old pipeline import.
+ */
+export const leadPipeline = leadStatsOrder;

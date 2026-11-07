@@ -18,6 +18,8 @@ export const demoAreas: Area[] = [
       "Walkable local markets and everyday services",
       "Easy access to Velachery and the OMR corridor",
     ],
+    parentArea: "Chennai",
+    isActive: true,
   },
   {
     slug: "keelkattalai",
@@ -32,6 +34,8 @@ export const demoAreas: Area[] = [
       "Good stock of independent houses",
       "Close to Madipakkam and Medavakkam",
     ],
+    parentArea: "Chennai",
+    isActive: true,
   },
   {
     slug: "pallikaranai",
@@ -46,6 +50,8 @@ export const demoAreas: Area[] = [
       "Direct access to OMR",
       "Wide choice of schools and hospitals nearby",
     ],
+    parentArea: "Chennai",
+    isActive: true,
   },
   {
     slug: "velachery",
@@ -60,5 +66,7 @@ export const demoAreas: Area[] = [
       "Malls, restaurants, and daily conveniences",
       "Large rental market for families and professionals",
     ],
+    parentArea: "Chennai",
+    isActive: true,
   },
 ];

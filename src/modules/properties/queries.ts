@@ -71,6 +71,7 @@ export interface PropertyStats {
   available: number;
   underOffer: number;
   featured: number;
+  closed: number;
 }
 
 export function getPropertyStats(): PropertyStats {
@@ -84,5 +85,12 @@ export function getPropertyStats(): PropertyStats {
       (property) => property.status === "under-offer",
     ).length,
     featured: properties.filter((property) => property.isFeatured).length,
+    closed: properties.filter((property) => property.status === "sold").length,
   };
+}
+
+export function getRecentProperties(limit = 5): Property[] {
+  return getAllProperties()
+    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+    .slice(0, Math.max(0, limit));
 }

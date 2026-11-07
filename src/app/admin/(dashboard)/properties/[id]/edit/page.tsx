@@ -1,12 +1,9 @@
-import { ArrowLeft } from "lucide-react";
 import type { Metadata } from "next";
-import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import { AdminPageHeader } from "@/components/admin/admin-page-header";
 import { Notice } from "@/components/common/notice";
-import { PageHeader } from "@/components/common/page-header";
 import { PropertyForm } from "@/components/forms/property-form";
-import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { getAreasWithCounts } from "@/modules/areas/queries";
 import {
@@ -50,32 +47,24 @@ export default async function EditPropertyPage({
 
   return (
     <div>
-      <Button asChild variant="ghost" size="sm" className="-ml-2">
-        <Link href="/admin/properties">
-          <ArrowLeft aria-hidden="true" />
-          Back to properties
-        </Link>
-      </Button>
-
-      <PageHeader
-        className="mt-4"
-        variant="admin"
+      <AdminPageHeader
+        breadcrumbs={[
+          { label: "Properties", href: "/admin/properties" },
+          { label: property.id },
+          { label: "Edit" },
+        ]}
         eyebrow="Properties"
         title="Edit property"
-        description={`Working on: ${property.title}. This preview shows the fields that will be editable once the data layer is connected.`}
+        description={`Working on ${property.id}: ${property.title}. All available demo details are prefilled and optional fields remain blank where no value exists.`}
       />
 
       <Notice className="mt-6">
-        Editing is disabled in this foundation build. Changes are not saved, and
-        no data leaves this page.
+        Development preview — changes are validated in the browser but are not
+        saved. Existing demo data and public pages remain unchanged.
       </Notice>
 
-      <Card className="mt-6 p-6 sm:p-8">
-        <PropertyForm
-          areas={areas}
-          property={property}
-          submitLabel="Save changes"
-        />
+      <Card className="mt-6 p-5 sm:p-8">
+        <PropertyForm areas={areas} property={property} />
       </Card>
     </div>
   );

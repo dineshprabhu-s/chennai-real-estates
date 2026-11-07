@@ -1,11 +1,13 @@
 import type {
   ApprovalStatus,
+  BrokerageType,
   Facing,
   FurnishingStatus,
   ListingType,
   PropertyConfiguration,
   PropertyStatus,
   PropertyType,
+  VerificationStatus,
 } from "@/types/property";
 
 export const propertyTypeLabels: Record<PropertyType, string> = {
@@ -37,6 +39,18 @@ export const propertyStatusLabels: Record<PropertyStatus, string> = {
   "under-offer": "Under offer",
   sold: "Sold",
   draft: "Draft",
+  unavailable: "Unavailable",
+  expired: "Expired",
+};
+
+/** Broker-facing wording. Underlying status values stay consistent. */
+export const adminPropertyStatusLabels: Record<PropertyStatus, string> = {
+  available: "Available",
+  "under-offer": "Under negotiation",
+  sold: "Closed",
+  draft: "Draft",
+  unavailable: "Unavailable",
+  expired: "Expired",
 };
 
 export const facingLabels: Record<Facing, string> = {
@@ -61,6 +75,54 @@ export const approvalStatusLabels: Record<ApprovalStatus, string> = {
   unapproved: "Unapproved",
   "not-applicable": "Not applicable",
 };
+
+export const approvalStatusOptions: ReadonlyArray<{
+  value: ApprovalStatus;
+  label: string;
+}> = [
+  { value: "unapproved", label: approvalStatusLabels.unapproved },
+  { value: "approved", label: approvalStatusLabels.approved },
+  { value: "not-applicable", label: approvalStatusLabels["not-applicable"] },
+];
+
+export const verificationStatusLabels: Record<VerificationStatus, string> = {
+  sample: "Sample / unverified",
+  "broker-confirmed": "Broker confirmed",
+};
+
+export const verificationStatusOptions: ReadonlyArray<{
+  value: VerificationStatus;
+  label: string;
+}> = [
+  { value: "sample", label: verificationStatusLabels.sample },
+  {
+    value: "broker-confirmed",
+    label: verificationStatusLabels["broker-confirmed"],
+  },
+];
+
+export const brokerageTypeLabels: Record<BrokerageType, string> = {
+  percentage: "Percentage of value",
+  fixed: "Fixed amount",
+  none: "No brokerage",
+};
+
+export const brokerageTypeOptions: ReadonlyArray<{
+  value: BrokerageType;
+  label: string;
+}> = [
+  { value: "percentage", label: brokerageTypeLabels.percentage },
+  { value: "fixed", label: brokerageTypeLabels.fixed },
+  { value: "none", label: brokerageTypeLabels.none },
+];
+
+export const furnishingOptions: ReadonlyArray<{
+  value: FurnishingStatus;
+  label: string;
+}> = Object.entries(furnishingLabels).map(([value, label]) => ({
+  value: value as FurnishingStatus,
+  label,
+}));
 
 export const propertyTypeOptions: ReadonlyArray<{
   value: PropertyType;
@@ -104,10 +166,12 @@ export const propertyStatusOptions: ReadonlyArray<{
   value: PropertyStatus;
   label: string;
 }> = [
-  { value: "available", label: propertyStatusLabels.available },
-  { value: "under-offer", label: propertyStatusLabels["under-offer"] },
-  { value: "sold", label: propertyStatusLabels.sold },
-  { value: "draft", label: propertyStatusLabels.draft },
+  { value: "draft", label: adminPropertyStatusLabels.draft },
+  { value: "available", label: adminPropertyStatusLabels.available },
+  { value: "under-offer", label: adminPropertyStatusLabels["under-offer"] },
+  { value: "sold", label: adminPropertyStatusLabels.sold },
+  { value: "unavailable", label: adminPropertyStatusLabels.unavailable },
+  { value: "expired", label: adminPropertyStatusLabels.expired },
 ];
 
 /** Contextual price label for cards and detail pages. */

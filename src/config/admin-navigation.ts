@@ -2,6 +2,7 @@ import {
   Building2,
   LayoutDashboard,
   MapPin,
+  PlusCircle,
   Users,
   type LucideIcon,
 } from "lucide-react";
@@ -11,6 +12,8 @@ export interface AdminNavigationItem {
   href: string;
   icon: LucideIcon;
   exact?: boolean;
+  /** Paths that must not mark this item active. */
+  excludePrefixes?: string[];
 }
 
 export const adminNavigation: AdminNavigationItem[] = [
@@ -20,7 +23,18 @@ export const adminNavigation: AdminNavigationItem[] = [
     icon: LayoutDashboard,
     exact: true,
   },
-  { label: "Properties", href: "/admin/properties", icon: Building2 },
-  { label: "Leads", href: "/admin/leads", icon: Users },
+  {
+    label: "Properties",
+    href: "/admin/properties",
+    icon: Building2,
+    excludePrefixes: ["/admin/properties/new"],
+  },
+  {
+    label: "Add Property",
+    href: "/admin/properties/new",
+    icon: PlusCircle,
+    exact: true,
+  },
+  { label: "Leads / Enquiries", href: "/admin/leads", icon: Users },
   { label: "Areas", href: "/admin/areas", icon: MapPin },
 ];

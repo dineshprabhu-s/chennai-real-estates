@@ -1,0 +1,756 @@
+"use client";
+
+import {
+  CalendarCheck,
+  CheckCircle2,
+  Eye,
+  Handshake,
+  Inbox,
+  PhoneCall,
+  RotateCcw,
+  Search,
+  StickyNote,
+  XCircle,
+} from "lucide-react";
+import Link from "next/link";
+import { useMemo, useState } from "react";
+
+import { LeadStatusBadge } from "@/components/admin/badges";
+import { AdminDataTable, type AdminTableColumn } from "@/components/admin/data-table";
+import { DemoFeedback } from "@/components/admin/demo-feedback";
+import { AdminModal } from "@/components/admin/modal";
+import { StatCard } from "@/components/admin/stat-card";
+import { EmptyState } from "@/components/common/empty-state";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { NativeSelect } from "@/components/ui/native-select";
+import { Textarea } from "@/components/ui/textarea";
+import { formatDate } from "@/lib/format";
+import {
+  leadSourceLabels,
+  leadStatusLabels,
+  leadStatusOptions,
+} from "@/modules/leads/constants";
+import type { Lead, LeadStatus } from "@/types/lead";
+
+interface LeadPropertyOption {
+  id: string;
+  title: string;
+  locality: string;
+}
+
+interface AdminLeadsClientProps {
+  initialLeads: Lead[];
+  properties: LeadPropertyOption[];
+  initialLeadId?: string;
+  initialStatus?: LeadStatus;
+}
+
+const filterLabelClass =
+  "text-[11px] font-semibold tracking-[0.12em] text-muted-foreground uppercase";
+
+const statusIcons = {
+  new: Inbox,
+  contacted: PhoneCall,
+  "visit-scheduled": CalendarCheck,
+  negotiation: Handshake,
+  converted: CheckCircle2,
+  "closed-lost": XCircle,
+} as const;
+
+export function AdminLeadsClient({
+  initialLeads,
+  properties,
+  initialLeadId,
+  initialStatus,
+}: AdminLeadsClientProps) {
+  const [leads, setLeads] = useState(initialLeads);
+  const [query, setQuery] = useState("");
+  const [status, setStatus] = useState<LeadStatus | "all">(
+    initialStatus ?? "all",
+  );
+  const [source, setSource] = useState("all");
+  const [propertyId, setPropertyId] = useState("all");
+  const [selectedId, setSelectedId] = useState<string | null>(
+    initialLeadId ?? null,
+  );
+  const [noteDraft, setNoteDraft] = useState("");
+  const [feedback, setFeedback] = useState<string | null>(null);
+
+  const selectedLead =
+    leads.find((lead) => lead.id === selectedId) ?? null;
+
+  const counts = useMemo(() => {
+    const base: Record<LeadStatus, number> = {
+      new: 0,
+      contacted: 0,
+      "visit-scheduled": 0,
+      negotiation: 0,
+      converted: 0,
+      "closed-lost": 0,
+    };
+
+    for (const lead of leads) {
+      base[lead.status] += 1;
+    }
+
+    return base;
+  }, [leads]);
+
+  const normalizedQuery = query.trim().toLowerCase();
+  const filtered = useMemo(
+    () =>
+      leads.filter((lead) => {
+        const property = properties.find(
+          (candidate) => candidate.id === lead.propertyId,
+        );
+        const matchesQuery =
+          normalizedQuery.length === 0 ||
+          [
+            lead.id,
+            lead.name,
+            lead.phone,
+            lead.email ?? "",
+            lead.message,
+            property?.title ?? "",
+            property?.locality ?? "",
+          ]
+            .join(" ")
+            .toLowerCase()
+            .includes(normalizedQuery);
+
+        return (
+          matchesQuery &&
+          (status === "all" || lead.status === status) &&
+          (source === "all" || lead.source === source) &&
+          (propertyId === "all" ||
+            (propertyId === "general"
+              ? lead.propertyId === null
+              : lead.propertyId === propertyId))
+        );
+      }),
+    [leads, normalizedQuery, status, source, propertyId, properties],
+  );
+
+  const hasFilters =
+    normalizedQuery.length > 0 ||
+    status !== "all" ||
+    source !== "all" ||
+    propertyId !== "all";
+
+  function clearFilters() {
+    setQuery("");
+    setStatus("all");
+    setSource("all");
+    setPropertyId("all");
+  }
+
+  function propertyFor(lead: Lead) {
+    return properties.find((property) => property.id === lead.propertyId);
+  }
+
+  function updateLead(
+    leadId: string,
+    updater: (lead: Lead) => Lead,
+    message: string,
+  ) {
+    setLeads((current) =>
+      current.map((lead) => (lead.id === leadId ? updater(lead) : lead)),
+    );
+    setFeedback(message);
+  }
+
+  function handleStatusChange(nextStatus: LeadStatus) {
+    if (!selectedLead) {
+      return;
+    }
+
+    const now = new Date().toISOString();
+    updateLead(
+      selectedLead.id,
+      (lead) => ({
+        ...lead,
+        status: nextStatus,
+        activities: [
+          ...(lead.activities ?? []),
+          {
+            id: `ACT-${lead.id}-${Date.now()}`,
+            at: now,
+            label: `Status changed to ${leadStatusLabels[nextStatus]}`,
+            detail: "Demo-only change from the admin preview.",
+          },
+        ],
+      }),
+      `${selectedLead.id} moved to "${leadStatusLabels[nextStatus]}" in this browser preview only. No lead data was saved.`,
+    );
+  }
+
+  function addNote() {
+    if (!selectedLead || noteDraft.trim().length === 0) {
+      return;
+    }
+
+    const note = noteDraft.trim();
+    const now = new Date().toISOString();
+    updateLead(
+      selectedLead.id,
+      (lead) => ({
+        ...lead,
+        notes: [...(lead.notes ?? []), note],
+        activities: [
+          ...(lead.activities ?? []),
+          {
+            id: `ACT-${lead.id}-${Date.now()}`,
+            at: now,
+            label: "Internal note added",
+            detail: note,
+          },
+        ],
+      }),
+      "Internal note added to this browser preview only. It was not stored and is never shown on public pages.",
+    );
+    setNoteDraft("");
+  }
+
+  const columns: Array<AdminTableColumn<Lead>> = [
+    {
+      id: "id",
+      header: "Lead ID",
+      headerClassName: "pl-5",
+      className: "pl-5 align-top",
+      cell: (lead) => (
+        <div>
+          <span className="font-mono text-xs font-semibold text-foreground">
+            {lead.id}
+          </span>
+          {lead.isDemo ? (
+            <p className="mt-1">
+              <Badge variant="outline">Demo</Badge>
+            </p>
+          ) : null}
+        </div>
+      ),
+    },
+    {
+      id: "customer",
+      header: "Customer",
+      className: "min-w-40 align-top",
+      cell: (lead) => (
+        <div>
+          <p className="font-medium text-foreground">{lead.name}</p>
+          <p className="mt-0.5 text-xs text-muted-foreground">{lead.phone}</p>
+        </div>
+      ),
+    },
+    {
+      id: "phone",
+      header: "Phone",
+      className: "align-top whitespace-nowrap text-muted-foreground",
+      cell: (lead) => lead.phone,
+    },
+    {
+      id: "property",
+      header: "Interested property",
+      className: "min-w-44 align-top",
+      cell: (lead) => {
+        const property = propertyFor(lead);
+        return property ? (
+          <div>
+            <p className="text-foreground">{property.title}</p>
+            <p className="mt-0.5 font-mono text-[11px] text-muted-foreground">
+              {property.id}
+            </p>
+          </div>
+        ) : (
+          <span className="text-muted-foreground">General enquiry</span>
+        );
+      },
+    },
+    {
+      id: "source",
+      header: "Source",
+      className: "align-top text-muted-foreground",
+      cell: (lead) =>
+        lead.source ? leadSourceLabels[lead.source] : "Not specified",
+    },
+    {
+      id: "date",
+      header: "Enquiry date",
+      className: "align-top whitespace-nowrap text-muted-foreground",
+      cell: (lead) => formatDate(lead.createdAt),
+    },
+    {
+      id: "status",
+      header: "Lead status",
+      className: "align-top",
+      cell: (lead) => <LeadStatusBadge status={lead.status} />,
+    },
+    {
+      id: "actions",
+      header: "Actions",
+      headerClassName: "pr-5 text-right sticky right-0 z-10 bg-card",
+      className: "pr-5 text-right align-top sticky right-0 bg-card",
+      cell: (lead) => (
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          onClick={() => {
+            setSelectedId(lead.id);
+            setFeedback(null);
+            setNoteDraft("");
+          }}
+          aria-label={`View ${lead.id}`}
+          title="View enquiry"
+        >
+          <Eye aria-hidden="true" />
+        </Button>
+      ),
+    },
+  ];
+
+  return (
+    <div className="mt-6">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        {leadStatusOptions.map((option) => (
+          <StatCard
+            key={option.value}
+            label={leadStatusLabels[option.value]}
+            value={counts[option.value]}
+            description={
+              option.value === "visit-scheduled"
+                ? "Scheduled property visits, separate from property availability."
+                : option.value === "new"
+                  ? "Enquiries awaiting a first response."
+                  : option.value === "converted"
+                    ? "Demo enquiries marked converted."
+                    : option.value === "closed-lost"
+                      ? "Demo enquiries marked closed or lost."
+                      : `Demo enquiries in the ${leadStatusLabels[option.value].toLowerCase()} stage.`
+            }
+            icon={statusIcons[option.value]}
+          />
+        ))}
+      </div>
+
+      <div className="mt-4 rounded-xl border border-border bg-card p-4 sm:p-5">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <p className="text-sm text-muted-foreground">
+            Showing{" "}
+            <span className="font-semibold text-foreground">
+              {filtered.length}
+            </span>{" "}
+            of{" "}
+            <span className="font-semibold text-foreground">{leads.length}</span>{" "}
+            {leads.length === 1 ? "enquiry" : "enquiries"}
+          </p>
+          <p className="text-xs text-muted-foreground">
+            All seeded enquiries are demo data
+          </p>
+        </div>
+
+        <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
+          <div className="space-y-2 sm:col-span-2">
+            <label htmlFor="lead-search" className={filterLabelClass}>
+              Search
+            </label>
+            <div className="relative">
+              <Search
+                aria-hidden="true"
+                className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
+              />
+              <Input
+                id="lead-search"
+                type="search"
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="Search name, phone, lead ID, or property"
+                className="pl-9"
+              />
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <label htmlFor="lead-status-filter" className={filterLabelClass}>
+              Status
+            </label>
+            <NativeSelect
+              id="lead-status-filter"
+              value={status}
+              onChange={(event) =>
+                setStatus(event.target.value as LeadStatus | "all")
+              }
+            >
+              <option value="all">All statuses</option>
+              {leadStatusOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </NativeSelect>
+          </div>
+
+          <div className="space-y-2">
+            <label htmlFor="lead-source-filter" className={filterLabelClass}>
+              Source
+            </label>
+            <NativeSelect
+              id="lead-source-filter"
+              value={source}
+              onChange={(event) => setSource(event.target.value)}
+            >
+              <option value="all">All sources</option>
+              {Object.entries(leadSourceLabels).map(([value, label]) => (
+                <option key={value} value={value}>
+                  {label}
+                </option>
+              ))}
+            </NativeSelect>
+          </div>
+
+          <div className="space-y-2">
+            <label htmlFor="lead-property-filter" className={filterLabelClass}>
+              Property
+            </label>
+            <NativeSelect
+              id="lead-property-filter"
+              value={propertyId}
+              onChange={(event) => setPropertyId(event.target.value)}
+            >
+              <option value="all">All properties</option>
+              <option value="general">General enquiries</option>
+              {properties.map((property) => (
+                <option key={property.id} value={property.id}>
+                  {property.id} · {property.title}
+                </option>
+              ))}
+            </NativeSelect>
+          </div>
+
+          <div className="flex items-end sm:col-span-2 lg:col-span-1">
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={clearFilters}
+              disabled={!hasFilters}
+              className="w-full sm:w-auto"
+            >
+              <RotateCcw aria-hidden="true" />
+              Clear filters
+            </Button>
+          </div>
+        </div>
+      </div>
+
+      <DemoFeedback message={feedback} className="mt-4" />
+
+      {filtered.length === 0 ? (
+        <EmptyState
+          className="mt-4"
+          icon={Search}
+          title="No enquiries match these filters"
+          description="Try a different name, phone number, property, or clear the filters."
+          action={
+            <Button type="button" variant="outline" onClick={clearFilters}>
+              <RotateCcw aria-hidden="true" />
+              Clear filters
+            </Button>
+          }
+        />
+      ) : (
+        <>
+          <div className="mt-4 space-y-3 lg:hidden">
+            {filtered.map((lead) => {
+              const property = propertyFor(lead);
+
+              return (
+                <Card key={lead.id} className="gap-4 p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <p className="font-mono text-[11px] font-semibold text-muted-foreground">
+                          {lead.id}
+                        </p>
+                        {lead.isDemo ? (
+                          <Badge variant="outline">Demo</Badge>
+                        ) : null}
+                      </div>
+                      <p className="mt-1 text-sm font-semibold text-foreground">
+                        {lead.name}
+                      </p>
+                      <p className="mt-0.5 text-xs text-muted-foreground">
+                        {lead.phone}
+                      </p>
+                    </div>
+                    <LeadStatusBadge status={lead.status} />
+                  </div>
+
+                  <div className="space-y-1 border-t border-border pt-3 text-xs text-muted-foreground">
+                    <p>
+                      <span className="font-medium text-foreground">
+                        {property ? property.title : "General enquiry"}
+                      </span>
+                      {property ? ` · ${property.id}` : ""}
+                    </p>
+                    <p>
+                      {lead.source ? leadSourceLabels[lead.source] : "No source"}{" "}
+                      · {formatDate(lead.createdAt)}
+                    </p>
+                  </div>
+
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setSelectedId(lead.id);
+                      setFeedback(null);
+                      setNoteDraft("");
+                    }}
+                  >
+                    <Eye aria-hidden="true" />
+                    View enquiry
+                  </Button>
+                </Card>
+              );
+            })}
+          </div>
+
+          <Card className="mt-4 hidden gap-0 overflow-hidden lg:block">
+            <AdminDataTable
+              rows={filtered}
+              columns={columns}
+              getRowKey={(lead) => lead.id}
+              caption="Customer enquiries"
+            />
+          </Card>
+        </>
+      )}
+
+      <AdminModal
+        open={selectedLead !== null}
+        onClose={() => setSelectedId(null)}
+        variant="drawer"
+        title={selectedLead ? selectedLead.name : "Enquiry"}
+        description={
+          selectedLead
+            ? `${selectedLead.id} · ${formatDate(selectedLead.createdAt)}`
+            : undefined
+        }
+      >
+        {selectedLead ? (
+          <div className="space-y-6">
+            <div className="flex flex-wrap items-center gap-2">
+              <LeadStatusBadge status={selectedLead.status} />
+              {selectedLead.isDemo ? (
+                <Badge variant="outline">Seeded demo enquiry</Badge>
+              ) : null}
+            </div>
+
+            <section>
+              <h3 className="text-sm font-semibold text-foreground">
+                Contact information
+              </h3>
+              <dl className="mt-3 space-y-2 text-sm">
+                <div className="flex justify-between gap-4">
+                  <dt className="text-muted-foreground">Phone</dt>
+                  <dd>
+                    <a
+                      href={`tel:${selectedLead.phone.replace(/\s+/g, "")}`}
+                      className="font-medium text-foreground hover:text-primary"
+                    >
+                      {selectedLead.phone}
+                    </a>
+                  </dd>
+                </div>
+                <div className="flex justify-between gap-4">
+                  <dt className="text-muted-foreground">Email</dt>
+                  <dd className="text-right">
+                    {selectedLead.email ? (
+                      <a
+                        href={`mailto:${selectedLead.email}`}
+                        className="font-medium text-foreground hover:text-primary"
+                      >
+                        {selectedLead.email}
+                      </a>
+                    ) : (
+                      <span className="text-muted-foreground">Not provided</span>
+                    )}
+                  </dd>
+                </div>
+                <div className="flex justify-between gap-4">
+                  <dt className="text-muted-foreground">Source</dt>
+                  <dd>
+                    {selectedLead.source
+                      ? leadSourceLabels[selectedLead.source]
+                      : "Not specified"}
+                  </dd>
+                </div>
+                <div className="flex justify-between gap-4">
+                  <dt className="text-muted-foreground">Created</dt>
+                  <dd>{formatDate(selectedLead.createdAt)}</dd>
+                </div>
+              </dl>
+            </section>
+
+            <section>
+              <h3 className="text-sm font-semibold text-foreground">
+                Interested property
+              </h3>
+              {(() => {
+                const property = propertyFor(selectedLead);
+
+                return property ? (
+                  <div className="mt-2 rounded-lg border border-border p-3">
+                    <p className="text-sm font-medium text-foreground">
+                      {property.title}
+                    </p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {property.id} · {property.locality}
+                    </p>
+                    <Button asChild variant="link" size="sm" className="mt-1 h-auto p-0">
+                      <Link
+                        href={`/admin/properties/${property.id}/edit`}
+                        onClick={() => setSelectedId(null)}
+                      >
+                        Open property record
+                      </Link>
+                    </Button>
+                  </div>
+                ) : (
+                  <p className="mt-2 text-sm text-muted-foreground">
+                    General enquiry with no property selected.
+                  </p>
+                );
+              })()}
+            </section>
+
+            <section>
+              <h3 className="text-sm font-semibold text-foreground">
+                Original message
+              </h3>
+              <blockquote className="mt-2 rounded-lg border border-border bg-muted/40 p-3 text-sm leading-relaxed text-muted-foreground">
+                {selectedLead.message}
+              </blockquote>
+            </section>
+
+            <section>
+              <h3 className="text-sm font-semibold text-foreground">
+                Lead status
+              </h3>
+              <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                Changes are demo-only and are not saved. Scheduling a visit does
+                not change any property&apos;s availability status.
+              </p>
+              <label htmlFor="lead-detail-status" className="sr-only">
+                Change lead status
+              </label>
+              <NativeSelect
+                id="lead-detail-status"
+                value={selectedLead.status}
+                onChange={(event) =>
+                  handleStatusChange(event.target.value as LeadStatus)
+                }
+                className="mt-3"
+              >
+                {leadStatusOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </NativeSelect>
+            </section>
+
+            <section>
+              <h3 className="flex items-center gap-2 text-sm font-semibold text-foreground">
+                <StickyNote aria-hidden="true" className="size-4 text-primary" />
+                Internal notes
+              </h3>
+              <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                Notes stay in the admin workspace and are never shown on public
+                pages. They are not persisted in this preview.
+              </p>
+
+              {(selectedLead.notes ?? []).length > 0 ? (
+                <ul className="mt-3 space-y-2">
+                  {(selectedLead.notes ?? []).map((note, index) => (
+                    <li
+                      key={`${selectedLead.id}-note-${index}`}
+                      className="rounded-lg border border-border bg-muted/30 px-3 py-2 text-sm leading-relaxed text-foreground"
+                    >
+                      {note}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="mt-3 text-xs text-muted-foreground">
+                  No notes yet.
+                </p>
+              )}
+
+              <label htmlFor="lead-note" className="sr-only">
+                Add an internal note
+              </label>
+              <Textarea
+                id="lead-note"
+                value={noteDraft}
+                onChange={(event) => setNoteDraft(event.target.value)}
+                placeholder="Add context for your next follow-up…"
+                className="mt-3 min-h-20"
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={addNote}
+                disabled={noteDraft.trim().length === 0}
+                className="mt-2"
+              >
+                Add note (demo)
+              </Button>
+            </section>
+
+            <section>
+              <h3 className="text-sm font-semibold text-foreground">
+                Activity history
+              </h3>
+              <ol className="mt-3 space-y-3">
+                {(selectedLead.activities ?? []).map((activity) => (
+                  <li
+                    key={activity.id}
+                    className="relative border-l border-border pl-4"
+                  >
+                    <span
+                      aria-hidden="true"
+                      className="absolute top-1 -left-[3px] size-1.5 rounded-full bg-primary"
+                    />
+                    <p className="text-sm font-medium text-foreground">
+                      {activity.label}
+                    </p>
+                    <p className="mt-0.5 text-xs text-muted-foreground">
+                      {formatDate(activity.at)}
+                    </p>
+                    {activity.detail ? (
+                      <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                        {activity.detail}
+                      </p>
+                    ) : null}
+                  </li>
+                ))}
+              </ol>
+            </section>
+
+            <DemoFeedback message={feedback} />
+
+            <p className="rounded-lg border border-dashed border-border bg-muted/40 px-3 py-2 text-xs leading-relaxed text-muted-foreground">
+              This is seeded demo data. No customer enquiry was received, and no
+              status change or note is persisted.
+            </p>
+          </div>
+        ) : null}
+      </AdminModal>
+    </div>
+  );
+}

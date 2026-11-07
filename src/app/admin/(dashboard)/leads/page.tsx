@@ -1,68 +1,80 @@
-import { Users } from "lucide-react";
+import { ExternalLink } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 
-import { EmptyState } from "@/components/common/empty-state";
+import { AdminPageHeader } from "@/components/admin/admin-page-header";
 import { Notice } from "@/components/common/notice";
-import { PageHeader } from "@/components/common/page-header";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
-import { siteConfig } from "@/config/site";
-import { leadPipeline, leadStatusLabels } from "@/modules/leads/constants";
-import { getLeadStatusCounts } from "@/modules/leads/queries";
+import { leadStatusOptions } from "@/modules/leads/constants";
+import { getLeads } from "@/modules/leads/queries";
+import { getAllProperties } from "@/modules/properties/queries";
+import type { LeadStatus } from "@/types/lead";
+
+import { AdminLeadsClient } from "./admin-leads-client";
 
 export const metadata: Metadata = {
-  title: "Leads",
+  title: "Leads and enquiries",
 };
 
-export default function AdminLeadsPage() {
-  const counts = getLeadStatusCounts();
+interface AdminLeadsPageProps {
+  searchParams: Promise<{ lead?: string | string[]; status?: string | string[] }>;
+}
+
+function firstValue(value: string | string[] | undefined): string | undefined {
+  return Array.isArray(value) ? value[0] : value;
+}
+
+/**
+ * Server wrapper for the demo lead inbox. Every record returned here is
+ * seeded sample data; no customer enquiry data is fetched from anywhere.
+ */
+export default async function AdminLeadsPage({
+  searchParams,
+}: AdminLeadsPageProps) {
+  const params = await searchParams;
+  const requestedLeadId = firstValue(params.lead);
+  const requestedStatus = firstValue(params.status);
+  const leads = getLeads();
+  const initialLeadId = leads.some((lead) => lead.id === requestedLeadId)
+    ? requestedLeadId
+    : undefined;
+  const initialStatus = leadStatusOptions.find(
+    (option) => option.value === requestedStatus,
+  )?.value as LeadStatus | undefined;
+  const properties = getAllProperties().map((property) => ({
+    id: property.id,
+    title: property.title,
+    locality: property.locality,
+  }));
 
   return (
     <div>
-      <PageHeader
-        variant="admin"
+      <AdminPageHeader
+        breadcrumbs={[{ label: "Leads / Enquiries" }]}
         eyebrow="Leads"
         title="Customer enquiries"
-        description="A single inbox for enquiries raised through the public website and property pages."
+        description="A single inbox for website, WhatsApp, and phone enquiries. Seeded demo records are labelled so they are never mistaken for real customers."
         actions={
           <Button asChild variant="outline">
-            <Link href={siteConfig.links.contact}>View contact page</Link>
+            <Link href="/">
+              <ExternalLink aria-hidden="true" />
+              Open public website
+            </Link>
           </Button>
         }
       />
 
       <Notice className="mt-6">
-        The leads module is not connected yet. Once the contact form is wired to
-        the leads store, enquiries will appear here with their source and status.
+        Development preview — every enquiry below is clearly labelled sample
+        data. Status changes and internal notes stay in this browser session and
+        are never stored or shown on public pages.
       </Notice>
 
-      <div className="mt-8 grid gap-4 sm:grid-cols-3">
-        {leadPipeline.map((stage) => (
-          <Card key={stage.status} className="gap-2 p-5">
-            <p className="text-sm font-medium text-muted-foreground">
-              {leadStatusLabels[stage.status]}
-            </p>
-            <p className="text-3xl font-semibold tracking-tight text-foreground">
-              {counts[stage.status]}
-            </p>
-            <p className="text-xs leading-relaxed text-muted-foreground">
-              {stage.description}
-            </p>
-          </Card>
-        ))}
-      </div>
-
-      <EmptyState
-        className="mt-6"
-        icon={Users}
-        title="No enquiries yet"
-        description="When a visitor sends an enquiry, it will be collected here with the property reference, contact details, and a status you can track."
-        action={
-          <Button asChild variant="outline">
-            <Link href="/admin/dashboard">Back to dashboard</Link>
-          </Button>
-        }
+      <AdminLeadsClient
+        initialLeads={leads}
+        properties={properties}
+        initialLeadId={initialLeadId}
+        initialStatus={initialStatus}
       />
     </div>
   );

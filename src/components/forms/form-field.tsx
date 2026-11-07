@@ -27,7 +27,7 @@ export function FormField({
   return (
     <div className={cn("space-y-2", className)}>
       <div className="flex items-baseline justify-between gap-3">
-        <Label htmlFor={htmlFor}>
+        <Label htmlFor={htmlFor} className="whitespace-nowrap">
           {label}
           {required ? (
             <span aria-hidden="true" className="text-destructive">
@@ -37,7 +37,9 @@ export function FormField({
           ) : null}
         </Label>
         {hint && !error ? (
-          <span className="text-xs text-muted-foreground">{hint}</span>
+          <span className="min-w-0 text-right text-xs leading-tight text-muted-foreground">
+            {hint}
+          </span>
         ) : null}
       </div>
       {children}

@@ -1,8 +1,8 @@
 # Chennai Real Estates
 
-A production-ready foundation for a single-broker real estate platform focused on **Madipakkam, Chennai**. The public property website is implemented against typed demo data, alongside the admin dashboard shells, a typed domain model, and a complete route structure.
+A production-ready foundation for a single-broker real estate platform focused on **Madipakkam, Chennai**. The public property website and a complete admin development preview are implemented against typed demo data, alongside a typed domain model and a full route structure.
 
-> **Foundation build only.** Authentication, Supabase, property persistence, image uploads, and the lead workflow are intentionally not implemented yet. All listings, areas, and contact details are sample content for interface development and must be replaced or verified before launch.
+> **Development preview.** Authentication, Supabase, property persistence, image uploads, real lead storage, and notifications are intentionally not implemented yet. Admin workflows validate and update browser state only; nothing is written to a database. All listings, areas, enquiries, and contact details are sample content for interface development and must be replaced or verified before launch.
 
 ---
 
@@ -11,7 +11,7 @@ A production-ready foundation for a single-broker real estate platform focused o
 Chennai Real Estates is designed around one broker rather than a crowded marketplace:
 
 - **Public website** — browse properties, explore area guides, and contact the broker.
-- **Admin dashboard** — manage properties, enquiries, and area coverage (UI shell in this stage).
+- **Admin preview** — dashboard, property management, add/edit form, enquiry inbox, and area management for one broker, with every write clearly marked as demo-only.
 - **Modular domain layer** — property, area, and lead logic kept separate from presentation.
 - **Reusable UI foundation** — shadcn/ui-compatible primitives, responsive navigation, loading and error states.
 
@@ -102,12 +102,14 @@ Then open [http://localhost:3000](http://localhost:3000).
 | --- | --- |
 | `/admin` | Redirects to the dashboard |
 | `/admin/login` | Broker sign-in screen (not functional yet) |
-| `/admin/dashboard` | Dashboard overview |
-| `/admin/properties` | Property management table |
-| `/admin/properties/new` | Add-property form preview |
-| `/admin/properties/[id]/edit` | Edit-property form preview |
-| `/admin/leads` | Customer enquiry inbox placeholder |
-| `/admin/areas` | Area management |
+| `/admin/dashboard` | Broker overview with computed catalogue/enquiry stats, recent properties, recent demo enquiries, and quick actions |
+| `/admin/properties` | Searchable, filterable property management with desktop table, mobile cards, view dialog, edit links, and demo publish/unpublish/status controls |
+| `/admin/properties/new` | Full add-property form with validation, conditional pricing, verification safeguards, brokerage, and preview-only images |
+| `/admin/properties/[id]/edit` | The same form prefilled from a demo listing; unknown IDs show the not-found state |
+| `/admin/leads` | Demo enquiry inbox with counts, search, filters, a detail drawer, demo status changes, internal notes, and activity history |
+| `/admin/areas` | Area management with property counts, active state, search, and add/edit dialogs |
+
+All admin pages render the persistent notice: **“Development preview — authentication and database persistence are not enabled.”** No admin route is protected, and the demo Logout action does not end a real session.
 
 ---
 
@@ -130,6 +132,33 @@ The public site reads from `src/modules/properties/data/demo-properties.ts`. Nin
 `MAD-0007`, `MAD-0008`, and `MAD-0009` are sample/unverified entries. Their original WhatsApp references (`31-10-26-35`, `31-10-26-36`, `04-11-26-11`) are kept in `whatsappReference` and are never used as the permanent ID. Unapproved status is shown prominently on cards and detail pages.
 
 Property media uses labelled SVG illustrations, not photographs. Replace them with broker-supplied images when the media pipeline exists.
+
+---
+
+## Admin development preview
+
+The admin workspace is a complete interface preview backed by the same typed demo data as the public site. It is intentionally not connected to a database or authentication provider.
+
+### Demo workflows
+
+- **Dashboard** — property and enquiry statistics are calculated from the demo queries (`getPropertyStats`, `getLeadStats`), alongside the five most recently updated listings, the five newest enquiries, and quick-action shortcuts.
+- **Property management** — keyword search (ID, title, locality), transaction/locality/type/status filters, clear filters, a desktop table and mobile cards, a read-only view dialog, and links into the edit form.
+- **Property form** — shared by add and edit. Sections cover basic information, specifications, conditional pricing, legal/verification, brokerage, preview-only images, and listing actions. Validation focuses the first invalid field. An approved listing cannot remain sample/unverified, and a broker-confirmed listing requires a last-verified date.
+- **Demo status and publish actions** — status changes and publish/unpublish update React state for the current browser session only. They never alter the public catalogue or `demo-properties.ts`.
+- **Leads inbox** — six-stage pipeline (new, contacted, visit scheduled, negotiation, converted, closed/lost), counts, search, status/source/property filters, and a detail drawer with contact details, the original message, internal notes, and activity history. Every seeded record is labelled **Demo** and uses placeholder contact details.
+- **Areas** — all four demo localities with mapped listing counts, optional parent city, active state, search, and an add/edit dialog with validation. New areas show zero listings and do not appear publicly.
+
+### Enquiry demo data
+
+`src/modules/leads/data/demo-leads.ts` contains seven clearly labelled sample enquiries (`LEAD-1001`–`LEAD-1007`). They exist only to exercise the inbox interface. Names, phone numbers, e-mail addresses, and messages are placeholders, and no record is read by public pages. Status changes and notes are local to the open browser session.
+
+### What is not persisted
+
+- Property create, edit, publish, unpublish, and status changes.
+- Lead status changes, internal notes, and activity additions.
+- Area creation, editing, and active/inactive state changes.
+- Selected property images (browser object URLs only; no upload).
+- Any dashboard statistic affected by those changes; the server-rendered figures return to the seed values on reload.
 
 ---
 
@@ -169,10 +198,13 @@ chennai-real-estates/
 │  │  │  │  ├─ error.tsx
 │  │  │  │  ├─ dashboard/page.tsx
 │  │  │  │  ├─ properties/page.tsx
+│  │  │  │  ├─ properties/admin-properties-client.tsx
 │  │  │  │  ├─ properties/new/page.tsx
 │  │  │  │  ├─ properties/[id]/edit/page.tsx
 │  │  │  │  ├─ leads/page.tsx
-│  │  │  │  └─ areas/page.tsx
+│  │  │  │  ├─ leads/admin-leads-client.tsx
+│  │  │  │  ├─ areas/page.tsx
+│  │  │  │  └─ areas/admin-areas-client.tsx
 │  │  │  ├─ login/page.tsx
 │  │  │  └─ page.tsx                   # /admin redirect
 │  │  ├─ error.tsx
@@ -182,10 +214,10 @@ chennai-real-estates/
 │  │  ├─ icon.svg
 │  │  └─ layout.tsx                    # Fonts, metadata, viewport
 │  ├─ components/
-│  │  ├─ admin/                        # Admin-specific presentation
+│  │  ├─ admin/                        # Admin shell, headers, tables, badges, dialogs
 │  │  ├─ areas/                        # Area cards
 │  │  ├─ common/                       # Container, headers, empty/error/loading states
-│  │  ├─ forms/                        # Contact, login, property form previews
+│  │  ├─ forms/                        # Contact, login, property, area, and image preview forms
 │  │  ├─ layout/                       # Public and admin navigation shells
 │  │  ├─ property/                     # Property cards, grids, status badges
 │  │  └─ ui/                           # shadcn/ui-compatible primitives
@@ -194,7 +226,7 @@ chennai-real-estates/
 │  ├─ lib/                             # Formatting and shared utilities
 │  ├─ modules/
 │  │  ├─ areas/                        # Area data and queries
-│  │  ├─ leads/                        # Lead labels and queries
+│  │  ├─ leads/                        # Lead labels, demo enquiries, and queries
 │  │  └─ properties/                   # Property data, labels, and queries
 │  └─ types/                           # Domain types (property, area, lead)
 ├─ .env.example
@@ -211,7 +243,8 @@ chennai-real-estates/
 - **Server components are the default.** Client components are limited to interactive pieces: active navigation state, mobile menus, scroll locking, and form previews.
 - **Business logic lives in `src/modules`.** Pages compose data queries and presentation; data sources can later be swapped to Supabase without rewriting UI components.
 - **UI primitives live in `src/components/ui`.** They follow shadcn/ui conventions (`cn`, `cva`, `data-slot`, CSS variables) and can be extended with the shadcn CLI.
-- **Sample data is isolated.** `demo-properties.ts`, `demo-areas.ts`, and the empty lead store are clearly marked and safe to replace.
+- **Sample data is isolated.** `demo-properties.ts`, `demo-areas.ts`, and `demo-leads.ts` are clearly marked and safe to replace. Admin mutations stay in component state.
+- **Admin UI is modular.** Shell, headers, tables, badges, dialogs, the property form, the area form, and the image preview selector live in reusable components rather than one large page.
 - **Strict TypeScript** (`strict`, `noUncheckedIndexedAccess`) and an ESLint rule banning explicit `any`.
 
 ---
@@ -256,9 +289,9 @@ Typography:
 
 1. **Authentication** — broker-only sign-in, protected admin routes, session handling.
 2. **Supabase data layer** — schema for properties, areas, leads, and media; typed repositories.
-3. **Property workflow** — create, edit, publish/unpublish, archive, image uploads, validation.
-4. **Lead capture** — functional enquiry form, property references, status tracking, notifications.
-5. **Area management** — create/edit areas, assign listings, area-level SEO content.
+3. **Property workflow** — connect the existing admin form to persistent create/edit/publish operations, image uploads, and audit history.
+4. **Lead capture** — replace the demo enquiry inbox with real submissions, property references, status tracking, and notifications.
+5. **Area management** — persist areas, assign listings, and generate area-level SEO content.
 6. **Media and verification** — broker-supplied photography, document review, verified-listing workflow.
 7. **Public experience extras** — saved shortlists, share links, structured data, live availability.
 8. **Operations** — audit trail, backups, analytics, and deployment configuration.
@@ -267,11 +300,11 @@ Typography:
 
 ## Current limitations
 
-- No authentication or route protection.
-- No database, API routes, server actions, or persistence.
-- No image uploads or storage integration.
-- No functional property create/edit/delete workflow.
-- No lead submission or inbox. The contact form validates in the browser and shows a demo-only message; it does not send or store anything.
+- No authentication or route protection. `/admin/login` and Logout are placeholders, and the admin shell states this on every page.
+- No database, API routes, server actions, or persistence. Admin changes are held in browser state and reset on reload.
+- No image uploads or storage integration. The property form previews selected files with object URLs only.
+- Property create/edit/publish/status changes are simulated; the public catalogue always reads the original nine demo records.
+- Leads and areas are demo data. Seeded enquiries are labelled, and internal notes/status changes are never stored or shown publicly.
 - Listings, areas, and contact details are sample data and placeholder content. The three supplied Madipakkam entries remain unverified until the broker confirms them.
 - WhatsApp is unavailable until `NEXT_PUBLIC_WHATSAPP_NUMBER` is configured with a real business number.
 - Property images are illustrative SVG placeholders, not photographs of the listed properties.
@@ -289,4 +322,4 @@ npm run typecheck
 npm run build
 ```
 
-The foundation build is considered healthy only when all three commands pass without errors.
+The build is considered healthy only when all three commands pass without errors. For the admin preview, also review `/admin/dashboard`, `/admin/properties`, `/admin/properties/new`, an edit route such as `/admin/properties/MAD-0001/edit`, `/admin/leads`, and `/admin/areas` at mobile and desktop widths, and confirm the public routes still behave as before.

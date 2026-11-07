@@ -5,4 +5,7 @@ export interface Area {
   summary: string;
   description: string;
   highlights: string[];
+  /** Parent city or locality. Optional because public records may not need it. */
+  parentArea?: string;
+  isActive?: boolean;
 }

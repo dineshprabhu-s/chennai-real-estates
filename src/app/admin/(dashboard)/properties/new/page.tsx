@@ -1,11 +1,8 @@
-import { ArrowLeft } from "lucide-react";
 import type { Metadata } from "next";
-import Link from "next/link";
 
+import { AdminPageHeader } from "@/components/admin/admin-page-header";
 import { Notice } from "@/components/common/notice";
-import { PageHeader } from "@/components/common/page-header";
 import { PropertyForm } from "@/components/forms/property-form";
-import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { getAreasWithCounts } from "@/modules/areas/queries";
 
@@ -21,27 +18,22 @@ export default function NewPropertyPage() {
 
   return (
     <div>
-      <Button asChild variant="ghost" size="sm" className="-ml-2">
-        <Link href="/admin/properties">
-          <ArrowLeft aria-hidden="true" />
-          Back to properties
-        </Link>
-      </Button>
-
-      <PageHeader
-        className="mt-4"
-        variant="admin"
+      <AdminPageHeader
+        breadcrumbs={[
+          { label: "Properties", href: "/admin/properties" },
+          { label: "Add property" },
+        ]}
         eyebrow="Properties"
         title="Add a property"
-        description="This form previews the fields a complete listing will need. Validation and saving will be connected with the data layer."
+        description="Prepare a complete listing with pricing, verification, brokerage, and image previews. Validation runs in the browser."
       />
 
       <Notice className="mt-6">
-        The form is intentionally non-functional in this foundation build. All
-        fields are safe to explore; nothing is saved or transmitted.
+        Development preview — this form does not save or publish anything.
+        Selected images stay in your browser and are never uploaded.
       </Notice>
 
-      <Card className="mt-6 p-6 sm:p-8">
+      <Card className="mt-6 p-5 sm:p-8">
         <PropertyForm areas={areas} />
       </Card>
     </div>

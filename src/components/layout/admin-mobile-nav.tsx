@@ -1,10 +1,11 @@
 "use client";
 
-import { ExternalLink, Menu, X } from "lucide-react";
+import { ExternalLink, Menu, ShieldAlert, X } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
+import { AdminLogoutButton } from "@/components/admin/admin-logout-button";
 import { BrandMark } from "@/components/common/logo";
 import { AdminNavLinks } from "@/components/layout/admin-nav-links";
 import { buttonVariants } from "@/components/ui/button";
@@ -46,7 +47,7 @@ export function AdminMobileNav() {
         aria-expanded={open}
         aria-controls="admin-mobile-menu"
         className={cn(
-          buttonVariants({ variant: "outline", size: "icon" }),
+          buttonVariants({ variant: "outline", size: "icon-sm" }),
           "lg:hidden",
         )}
       >
@@ -105,17 +106,32 @@ export function AdminMobileNav() {
                     className="mt-3 space-y-1"
                     onNavigate={() => setOpen(false)}
                   />
+
+                  <div className="mt-6 rounded-lg border border-dashed border-border bg-muted/50 p-4">
+                    <p className="flex items-center gap-2 text-xs font-semibold text-foreground">
+                      <ShieldAlert
+                        aria-hidden="true"
+                        className="size-3.5 text-warning"
+                      />
+                      Development preview
+                    </p>
+                    <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
+                      Authentication, database writes, and image uploads are not
+                      enabled.
+                    </p>
+                  </div>
                 </div>
 
-                <div className="border-t border-border p-4">
+                <div className="space-y-1 border-t border-border p-4">
                   <Link
                     href="/"
                     onClick={() => setOpen(false)}
                     className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                   >
                     <ExternalLink aria-hidden="true" className="size-4" />
-                    View public website
+                    Back to Website
                   </Link>
+                  <AdminLogoutButton />
                 </div>
               </div>
             </div>,

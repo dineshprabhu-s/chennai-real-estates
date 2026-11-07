@@ -1,42 +1,138 @@
-import { ExternalLink, ShieldAlert } from "lucide-react";
+"use client";
+
+import {
+  ExternalLink,
+  PanelLeftClose,
+  PanelLeftOpen,
+  ShieldAlert,
+} from "lucide-react";
 import Link from "next/link";
 
-import { Logo } from "@/components/common/logo";
+import { AdminLogoutButton } from "@/components/admin/admin-logout-button";
+import { BrandMark, Logo } from "@/components/common/logo";
 import { AdminNavLinks } from "@/components/layout/admin-nav-links";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
-export function AdminSidebar() {
+interface AdminSidebarProps {
+  collapsed: boolean;
+  onToggleCollapsed: () => void;
+}
+
+export function AdminSidebar({
+  collapsed,
+  onToggleCollapsed,
+}: AdminSidebarProps) {
   return (
-    <aside className="fixed inset-y-0 left-0 z-30 hidden w-80 flex-col border-r border-border bg-card lg:flex">
-      <div className="flex h-20 shrink-0 items-center border-b border-border px-6">
-        <Logo showTagline={false} />
+    <aside
+      className={cn(
+        "fixed inset-y-0 left-0 z-30 hidden flex-col border-r border-border bg-card transition-[width] duration-200 lg:flex",
+        collapsed ? "w-20" : "w-80",
+      )}
+    >
+      <div
+        className={cn(
+          "flex h-20 shrink-0 items-center border-b border-border",
+          collapsed ? "justify-center px-2" : "justify-between gap-3 px-6",
+        )}
+      >
+        {collapsed ? (
+          <Link
+            href="/admin/dashboard"
+            aria-label="Chennai Real Estates admin dashboard"
+            className="rounded-md outline-none focus-visible:ring-[3px] focus-visible:ring-ring/25"
+          >
+            <BrandMark />
+          </Link>
+        ) : (
+          <Logo href="/admin/dashboard" showTagline={false} />
+        )}
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          onClick={onToggleCollapsed}
+          aria-label={collapsed ? "Expand admin sidebar" : "Collapse admin sidebar"}
+          title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          className={cn(collapsed && "absolute -right-3 top-6 z-10 size-6 rounded-full border border-border bg-card shadow-sm")}
+        >
+          {collapsed ? (
+            <PanelLeftOpen aria-hidden="true" className="size-3.5" />
+          ) : (
+            <PanelLeftClose aria-hidden="true" className="size-4" />
+          )}
+        </Button>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-4 py-6">
-        <p className="px-3 text-[11px] font-semibold tracking-[0.16em] text-muted-foreground uppercase">
+      <div
+        className={cn(
+          "flex-1 overflow-y-auto py-6",
+          collapsed ? "px-3" : "px-4",
+        )}
+      >
+        <p
+          className={cn(
+            "px-3 text-[11px] font-semibold tracking-[0.16em] text-muted-foreground uppercase",
+            collapsed && "sr-only",
+          )}
+        >
           Workspace
         </p>
-        <AdminNavLinks className="mt-3 space-y-1" />
+        <AdminNavLinks className="mt-3 space-y-1" collapsed={collapsed} />
 
-        <div className="mt-8 rounded-lg border border-dashed border-border bg-muted/40 p-4">
-          <p className="flex items-center gap-2 text-xs font-semibold text-foreground">
+        <div
+          className={cn(
+            "mt-8 rounded-lg border border-dashed border-border bg-muted/40 p-4",
+            collapsed && "flex justify-center p-3",
+          )}
+          title={
+            collapsed
+              ? "Development preview — no authentication or data persistence"
+              : undefined
+          }
+        >
+          <p
+            className={cn(
+              "flex items-center gap-2 text-xs font-semibold text-foreground",
+              collapsed && "sr-only",
+            )}
+          >
             <ShieldAlert aria-hidden="true" className="size-3.5 text-warning" />
-            Foundation build
+            Development preview
           </p>
-          <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
-            Authentication and data storage are not connected yet. Admin screens
-            currently show sample data.
-          </p>
+          {collapsed ? (
+            <ShieldAlert aria-hidden="true" className="size-4 text-warning" />
+          ) : (
+            <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
+              Authentication, database writes, and image uploads are not
+              enabled. Changes stay in this browser session only.
+            </p>
+          )}
         </div>
       </div>
 
-      <div className="shrink-0 border-t border-border p-4">
+      <div
+        className={cn(
+          "shrink-0 space-y-1 border-t border-border p-4",
+          collapsed && "px-2",
+        )}
+      >
         <Link
           href="/"
-          className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          title={collapsed ? "Back to website" : undefined}
+          className={cn(
+            "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground",
+            collapsed && "justify-center px-0",
+          )}
         >
-          <ExternalLink aria-hidden="true" className="size-4" />
-          View public website
+          <ExternalLink aria-hidden="true" className="size-4 shrink-0" />
+          {collapsed ? (
+            <span className="sr-only">Back to website</span>
+          ) : (
+            "Back to Website"
+          )}
         </Link>
+        <AdminLogoutButton collapsed={collapsed} />
       </div>
     </aside>
   );

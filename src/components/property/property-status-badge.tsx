@@ -12,6 +12,8 @@ const statusVariants: Record<
   "under-offer": "warning",
   sold: "secondary",
   draft: "outline",
+  unavailable: "destructive",
+  expired: "outline",
 };
 
 interface PropertyStatusBadgeProps {

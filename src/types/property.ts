@@ -13,7 +13,13 @@ export type PropertyConfiguration =
 
 export type ListingType = "sale" | "rent" | "lease";
 
-export type PropertyStatus = "available" | "under-offer" | "sold" | "draft";
+export type PropertyStatus =
+  | "available"
+  | "under-offer"
+  | "sold"
+  | "draft"
+  | "unavailable"
+  | "expired";
 
 export type Facing =
   | "north"
@@ -31,6 +37,8 @@ export type FurnishingStatus =
   | "furnished";
 
 export type ApprovalStatus = "approved" | "unapproved" | "not-applicable";
+
+export type BrokerageType = "percentage" | "fixed" | "none";
 
 /** Sample entries remain visibly unverified until the broker confirms them. */
 export type VerificationStatus = "sample" | "broker-confirmed";
@@ -67,9 +75,18 @@ export interface Property {
   approvalStatus?: ApprovalStatus;
   /** Human-readable brokerage terms exactly as supplied by the broker. */
   brokerage?: string;
+  /** Structured brokerage details used by the admin form preview. */
+  brokerageType?: BrokerageType;
+  brokerageValue?: string;
   /** Availability wording supplied with the listing, e.g. Ready to move. */
   availabilityNote?: string;
   landmark?: string;
+  /** Fuller address used in the admin workspace. */
+  address?: string;
+  totalFloors?: number;
+  securityDeposit?: number;
+  /** ISO date of the broker's most recent verification. */
+  lastVerifiedAt?: string;
   areaSlug: string;
   /** Display label for the area, e.g. "Madipakkam". */
   locality: string;
