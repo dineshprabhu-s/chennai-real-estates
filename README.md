@@ -2,7 +2,7 @@
 
 A production-ready foundation for a single-broker real estate platform focused on **Madipakkam, Chennai**. The public property website and a complete admin development preview are implemented against typed demo data, alongside a typed domain model and a full route structure.
 
-> **Development preview.** Authentication, Supabase, property persistence, image uploads, real lead storage, and notifications are intentionally not implemented yet. Admin workflows validate and update browser state only; nothing is written to a database. All listings, areas, enquiries, and contact details are sample content for interface development and must be replaced or verified before launch.
+> **Development preview.** Supabase client foundations are in place, but database queries, authentication, property persistence, image uploads, real lead storage, and notifications are intentionally not implemented yet. Admin workflows validate and update browser state only; nothing is written to a database. All listings, areas, enquiries, and contact details are sample content for interface development and must be replaced or verified before launch.
 
 ---
 
@@ -60,6 +60,23 @@ Copy-Item .env.example .env.local
 ```
 
 `NEXT_PUBLIC_SITE_URL` falls back to `http://localhost:3000` when unset. `NEXT_PUBLIC_WHATSAPP_NUMBER` is optional; without it the public site shows contact and enquiry fallbacks instead of WhatsApp links. No credentials are required to run the foundation build.
+
+### Supabase configuration (Phase 1)
+
+Supabase client factories live in `src/lib/supabase/`, but no database queries, authentication, or persistence use them yet. To connect a local environment:
+
+1. Copy `.env.example` to `.env.local` as shown above.
+2. In the Supabase dashboard, open **Project Settings → API** and copy the project URL and publishable key.
+3. Add both values to `.env.local`:
+
+   ```bash
+   NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+   NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=your-publishable-key
+   ```
+
+4. Restart the dev server. `NEXT_PUBLIC_*` values are inlined at build time, so a rebuild is required after changing them in a deployed build.
+
+The app reads only these two Supabase variables. They are validated lazily, the first time a Supabase client is created, so the project still builds and runs without them. The publishable key is browser-safe but is not an authorization mechanism: Row Level Security must enforce access once database queries are added. Never place a secret or service-role key in a `NEXT_PUBLIC_*` variable.
 
 ---
 
@@ -276,9 +293,8 @@ Typography:
 | --- | --- | --- |
 | `NEXT_PUBLIC_SITE_URL` | Public | Used for metadata and canonical site URL |
 | `NEXT_PUBLIC_WHATSAPP_NUMBER` | Public | Optional WhatsApp business number in international format; fallbacks render when unset |
-| `NEXT_PUBLIC_SUPABASE_URL` | Public | Planned — not implemented |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Public | Planned — not implemented |
-| `SUPABASE_SERVICE_ROLE_KEY` | Server only | Planned — never expose to the client |
+| `NEXT_PUBLIC_SUPABASE_URL` | Public | Supabase project URL; validated when a client is created |
+| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Public | Browser-safe Supabase key; validated when a client is created |
 | `ADMIN_SESSION_SECRET` | Server only | Planned — not implemented |
 
 `NEXT_PUBLIC_WHATSAPP_NUMBER` is embedded at build time, so rebuild after changing it in a production deployment. Only placeholder names are provided in `.env.example`. Do not commit real secrets.
