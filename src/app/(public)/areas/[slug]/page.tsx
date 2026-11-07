@@ -1,4 +1,4 @@
-import { ArrowLeft, ArrowRight, Check, MapPin } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, MapPin, RotateCcw } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -15,14 +15,35 @@ import {
   getAreaBySlug,
   getPublicAreasWithCounts,
 } from "@/modules/areas/queries";
+import {
+  listingTypeLabels,
+  listingTypeOptions,
+} from "@/modules/properties/constants";
 import { getPropertiesByArea } from "@/modules/properties/queries";
+import type { ListingType } from "@/types/property";
+import { cn } from "@/lib/utils";
+
+export const instant = false;
 
 interface AreaPageProps {
   params: Promise<{ slug: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }
 
 export function generateStaticParams() {
   return getPublicAreasWithCounts().map((area) => ({ slug: area.slug }));
+}
+
+function parseListingType(
+  value: string | string[] | undefined,
+): ListingType | null {
+  const raw = Array.isArray(value) ? value[0] : value;
+
+  if (!raw) {
+    return null;
+  }
+
+  return listingTypeOptions.find((option) => option.value === raw)?.value ?? null;
 }
 
 export async function generateMetadata({
@@ -46,15 +67,36 @@ export async function generateMetadata({
   };
 }
 
-export default async function AreaDetailPage({ params }: AreaPageProps) {
+export default async function AreaDetailPage({
+  params,
+  searchParams,
+}: AreaPageProps) {
   const { slug } = await params;
+  const query = await searchParams;
   const area = getAreaBySlug(slug);
 
   if (!area) {
     notFound();
   }
 
-  const properties = getPropertiesByArea(area.slug);
+  const selectedListingType = parseListingType(query.listingType);
+  const allProperties = getPropertiesByArea(area.slug);
+  const properties = selectedListingType
+    ? allProperties.filter(
+        (property) => property.listingType === selectedListingType,
+      )
+    : allProperties;
+
+  const filterOptions: Array<{
+    value: ListingType | null;
+    label: string;
+  }> = [
+    { value: null, label: "All listings" },
+    ...listingTypeOptions.map((option) => ({
+      value: option.value,
+      label: option.label,
+    })),
+  ];
 
   return (
     <Container className="py-10 sm:py-14">
@@ -88,12 +130,13 @@ export default async function AreaDetailPage({ params }: AreaPageProps) {
           {area.pincode}
         </Badge>
         <Badge variant="secondary">
-          {properties.length} {properties.length === 1 ? "listing" : "listings"}
+          {allProperties.length}{" "}
+          {allProperties.length === 1 ? "property" : "properties"}
         </Badge>
         <Badge variant="outline">Chennai, Tamil Nadu</Badge>
       </div>
 
-      <div className="mt-8 grid gap-6 lg:grid-cols-[1.4fr_1fr]">
+      <div className="mt-8 grid grid-cols-1 gap-6 lg:grid-cols-[1.4fr_1fr]">
         <Card className="gap-4 p-6">
           <h2 className="text-base font-semibold text-foreground">
             Why consider {area.name}
@@ -101,7 +144,7 @@ export default async function AreaDetailPage({ params }: AreaPageProps) {
           <p className="text-sm leading-relaxed text-muted-foreground">
             {area.summary}
           </p>
-          <ul className="grid gap-2.5 sm:grid-cols-2">
+          <ul className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
             {area.highlights.map((highlight) => (
               <li
                 key={highlight}
@@ -119,37 +162,95 @@ export default async function AreaDetailPage({ params }: AreaPageProps) {
 
         <Notice>
           Area notes and listings are sample content for the foundation build.
-          Verify schools, transport, and property details independently before
-          making a decision.
+          Verify schools, transport, property details, and approval status
+          independently before making a decision.
         </Notice>
       </div>
 
       <section aria-labelledby="area-listings" className="mt-14">
-        <div className="flex flex-wrap items-end justify-between gap-4 border-b border-border pb-5">
-          <div>
-            <h2
-              id="area-listings"
-              className="font-display text-3xl tracking-tight text-foreground"
-            >
-              Available in {area.name}
-            </h2>
-            <p className="mt-1.5 text-sm text-muted-foreground">
-              Sample listings currently mapped to this area.
-            </p>
+        <div className="flex flex-col gap-5 border-b border-border pb-5">
+          <div className="flex flex-wrap items-end justify-between gap-4">
+            <div>
+              <h2
+                id="area-listings"
+                className="font-display text-3xl tracking-tight text-foreground"
+              >
+                Available in {area.name}
+              </h2>
+              <p className="mt-1.5 text-sm text-muted-foreground">
+                {properties.length}{" "}
+                {properties.length === 1 ? "listing" : "listings"}
+                {selectedListingType
+                  ? ` · ${listingTypeLabels[selectedListingType]}`
+                  : " · all transaction types"}
+              </p>
+            </div>
+            <Button asChild variant="outline" size="sm">
+              <Link href={`/properties?areaSlug=${area.slug}`}>
+                Open in full catalogue
+                <ArrowRight aria-hidden="true" />
+              </Link>
+            </Button>
           </div>
-          <Button asChild variant="outline" size="sm">
-            <Link href="/properties">
-              All properties
-              <ArrowRight aria-hidden="true" />
-            </Link>
-          </Button>
+
+          <div className="flex flex-wrap gap-2">
+            {filterOptions.map((option) => {
+              const href = option.value
+                ? `/areas/${area.slug}?listingType=${option.value}`
+                : `/areas/${area.slug}`;
+              const active = option.value === selectedListingType;
+
+              return (
+                <Link
+                  key={option.label}
+                  href={href}
+                  aria-current={active ? "page" : undefined}
+                  className={cn(
+                    "rounded-full border px-3 py-1.5 text-xs font-medium transition-colors",
+                    active
+                      ? "border-primary bg-primary text-primary-foreground"
+                      : "border-border bg-background text-muted-foreground hover:border-primary/30 hover:text-primary",
+                  )}
+                >
+                  {option.label}
+                </Link>
+              );
+            })}
+            {selectedListingType ? (
+              <Link
+                href={`/areas/${area.slug}`}
+                className="inline-flex items-center gap-1 rounded-full px-3 py-1.5 text-xs font-medium text-primary underline-offset-4 hover:underline"
+              >
+                <RotateCcw aria-hidden="true" className="size-3" />
+                Clear
+              </Link>
+            ) : null}
+          </div>
         </div>
 
         <PropertyGrid
           className="mt-8"
           properties={properties}
-          emptyTitle={`No listings in ${area.name} yet`}
-          emptyDescription="New properties in this area will appear here once they are published."
+          emptyTitle={
+            selectedListingType
+              ? `No ${listingTypeLabels[selectedListingType].toLowerCase()} listings in ${area.name}`
+              : `No listings in ${area.name} yet`
+          }
+          emptyDescription="Try another transaction type or browse the full catalogue for nearby options."
+          emptyAction={
+            selectedListingType ? (
+              <Button asChild variant="outline">
+                <Link href={`/areas/${area.slug}`}>
+                  <RotateCcw aria-hidden="true" />
+                  Clear transaction filter
+                </Link>
+              </Button>
+            ) : (
+              <Button asChild variant="outline">
+                <Link href="/properties">Browse all properties</Link>
+              </Button>
+            )
+          }
         />
       </section>
     </Container>

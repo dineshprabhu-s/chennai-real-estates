@@ -2,11 +2,13 @@ import {
   Clock,
   Mail,
   MapPin,
+  MessageCircle,
   Phone,
   ShieldCheck,
   UserRound,
 } from "lucide-react";
 import type { Metadata } from "next";
+import Link from "next/link";
 
 import { Container } from "@/components/common/container";
 import { Notice } from "@/components/common/notice";
@@ -14,43 +16,16 @@ import { PageHeader } from "@/components/common/page-header";
 import { ContactForm } from "@/components/forms/contact-form";
 import { Card } from "@/components/ui/card";
 import { siteConfig } from "@/config/site";
+import { getGeneralWhatsAppUrl } from "@/lib/whatsapp";
+import { getPublicPropertyById } from "@/modules/properties/queries";
+
+export const instant = false;
 
 export const metadata: Metadata = {
   title: "Contact",
   description:
-    "Talk to Chennai Real Estates about buying, renting, or listing a property in Madipakkam and nearby Chennai neighbourhoods.",
+    "Talk to Chennai Real Estates about buying, renting, or leasing a property in Madipakkam and nearby Chennai neighbourhoods.",
 };
-
-const contactMethods = [
-  {
-    icon: Phone,
-    label: "Call",
-    value: siteConfig.contact.phoneLabel,
-    href: siteConfig.contact.phoneHref,
-    description: "Best for quick questions and site-visit scheduling.",
-  },
-  {
-    icon: Mail,
-    label: "Email",
-    value: siteConfig.contact.email,
-    href: siteConfig.contact.emailHref,
-    description: "Share requirements, documents, or a longer note.",
-  },
-  {
-    icon: MapPin,
-    label: "Based in",
-    value: siteConfig.contact.addressLines.join(", "),
-    href: null,
-    description: "Site visits across Madipakkam and nearby areas.",
-  },
-  {
-    icon: Clock,
-    label: "Hours",
-    value: siteConfig.contact.hours,
-    href: null,
-    description: "Messages outside these hours are answered next working day.",
-  },
-] as const;
 
 const expectations = [
   "A direct conversation with the broker, not a call centre.",
@@ -58,7 +33,72 @@ const expectations = [
   "Site visits coordinated around your availability.",
 ];
 
-export default function ContactPage() {
+interface ContactPageProps {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}
+
+function firstValue(value: string | string[] | undefined): string {
+  const raw = Array.isArray(value) ? value[0] : value;
+
+  return raw?.trim() ?? "";
+}
+
+export default async function ContactPage({ searchParams }: ContactPageProps) {
+  const params = await searchParams;
+  const propertyId = firstValue(params.property);
+  const property = propertyId
+    ? getPublicPropertyById(propertyId)
+    : undefined;
+  const whatsappUrl = getGeneralWhatsAppUrl();
+
+  const contactMethods = [
+    {
+      icon: Phone,
+      label: "Call",
+      value: siteConfig.contact.phoneLabel,
+      href: siteConfig.contact.phoneHref,
+      external: false,
+      description: "Best for quick questions and site-visit scheduling.",
+    },
+    ...(whatsappUrl
+      ? [
+          {
+            icon: MessageCircle,
+            label: "WhatsApp",
+            value: "Message the broker",
+            href: whatsappUrl,
+            external: true,
+            description:
+              "Open a pre-filled chat about your property requirement.",
+          },
+        ]
+      : []),
+    {
+      icon: Mail,
+      label: "Email",
+      value: siteConfig.contact.email,
+      href: siteConfig.contact.emailHref,
+      external: false,
+      description: "Share requirements, documents, or a longer note.",
+    },
+    {
+      icon: MapPin,
+      label: "Based in",
+      value: siteConfig.contact.addressLines.join(", "),
+      href: null,
+      external: false,
+      description: "Site visits across Madipakkam and nearby areas.",
+    },
+    {
+      icon: Clock,
+      label: "Hours",
+      value: siteConfig.contact.hours,
+      href: null,
+      external: false,
+      description: "Messages outside these hours are answered next working day.",
+    },
+  ];
+
   return (
     <Container className="py-12 sm:py-16">
       <PageHeader
@@ -69,10 +109,11 @@ export default function ContactPage() {
 
       <Notice className="mt-8">
         Contact details and form submission are placeholders for the foundation
-        build. Update the broker details in the site configuration before launch.
+        build. WhatsApp only appears when a business number is configured. Update
+        the broker details in the site configuration before launch.
       </Notice>
 
-      <div className="mt-10 grid gap-10 lg:grid-cols-[0.9fr_1.1fr] lg:items-start">
+      <div className="mt-10 grid grid-cols-1 gap-10 lg:grid-cols-[0.9fr_1.1fr] lg:items-start">
         <div className="space-y-4">
           {contactMethods.map((method) => {
             const content = (
@@ -98,6 +139,8 @@ export default function ContactPage() {
               <a
                 key={method.label}
                 href={method.href}
+                target={method.external ? "_blank" : undefined}
+                rel={method.external ? "noopener noreferrer" : undefined}
                 className="flex items-start gap-4 rounded-xl border border-border bg-card p-4 shadow-sm transition-colors hover:border-primary/35"
               >
                 {content}
@@ -140,11 +183,26 @@ export default function ContactPage() {
               Send an enquiry
             </h2>
             <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-              Fill in a few details and we will have the right context before we
-              speak. Required fields are marked with an asterisk.
+              Fill in a few details so the broker has the right context before
+              the conversation. Required fields are marked with an asterisk.
             </p>
+            {property ? (
+              <p className="mt-4 rounded-lg border border-border bg-muted/60 px-3 py-2 text-xs leading-relaxed text-muted-foreground">
+                About{" "}
+                <Link
+                  href={`/properties/${property.slug}`}
+                  className="font-semibold text-primary underline-offset-4 hover:underline"
+                >
+                  {property.title}
+                </Link>{" "}
+                · <span className="font-mono">{property.id}</span>
+              </p>
+            ) : null}
           </div>
-          <ContactForm />
+          <ContactForm
+            key={property?.id ?? "general-enquiry"}
+            property={property}
+          />
         </Card>
       </div>
     </Container>

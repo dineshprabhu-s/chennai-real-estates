@@ -38,6 +38,7 @@ export function BrandMark({ className, inverse = false }: BrandMarkProps) {
 
 interface LogoProps {
   className?: string;
+  textClassName?: string;
   inverse?: boolean;
   showTagline?: boolean;
   href?: string;
@@ -45,6 +46,7 @@ interface LogoProps {
 
 export function Logo({
   className,
+  textClassName,
   inverse = false,
   showTagline = true,
   href = "/",
@@ -59,7 +61,7 @@ export function Logo({
       aria-label="Chennai Real Estates — home"
     >
       <BrandMark inverse={inverse} />
-      <span className="flex min-w-0 flex-col">
+      <span className={cn("flex min-w-0 flex-col", textClassName)}>
         <span
           className={cn(
             "font-display text-xl leading-none tracking-tight sm:text-[1.35rem]",

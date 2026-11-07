@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 import { BrandMark } from "@/components/common/logo";
+import { WhatsAppEnquiryButton } from "@/components/property/whatsapp-enquiry-button";
 import { buttonVariants } from "@/components/ui/button";
 import { publicNavigation } from "@/config/navigation";
 import { siteConfig } from "@/config/site";
@@ -110,13 +111,12 @@ export function MobileNav() {
               </nav>
 
               <div className="space-y-3 border-t border-border px-4 py-6">
-                <Link
-                  href={siteConfig.links.contact}
-                  onClick={() => setOpen(false)}
-                  className={cn(buttonVariants({ size: "lg" }), "w-full")}
-                >
-                  Book a visit
-                </Link>
+                <WhatsAppEnquiryButton
+                  label="WhatsApp us"
+                  fallbackLabel="Send an enquiry"
+                  size="lg"
+                  className="w-full"
+                />
                 <a
                   href={siteConfig.contact.phoneHref}
                   className="flex items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-medium text-muted-foreground"

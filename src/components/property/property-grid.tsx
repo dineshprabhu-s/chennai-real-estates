@@ -1,4 +1,5 @@
 import { Building2 } from "lucide-react";
+import type * as React from "react";
 
 import { EmptyState } from "@/components/common/empty-state";
 import { PropertyCard } from "@/components/property/property-card";
@@ -9,6 +10,7 @@ interface PropertyGridProps {
   properties: Property[];
   emptyTitle?: string;
   emptyDescription?: string;
+  emptyAction?: React.ReactNode;
   className?: string;
 }
 
@@ -16,6 +18,7 @@ export function PropertyGrid({
   properties,
   emptyTitle = "No properties to show yet",
   emptyDescription = "New listings will appear here once they are published.",
+  emptyAction,
   className,
 }: PropertyGridProps) {
   if (properties.length === 0) {
@@ -24,6 +27,7 @@ export function PropertyGrid({
         icon={Building2}
         title={emptyTitle}
         description={emptyDescription}
+        action={emptyAction}
       />
     );
   }

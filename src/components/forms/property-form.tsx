@@ -174,7 +174,7 @@ export function PropertyForm({
               name="builtUpAreaSqft"
               type="number"
               min={0}
-              defaultValue={property?.builtUpAreaSqft}
+              defaultValue={property?.builtUpAreaSqft ?? undefined}
               placeholder="1250"
               required
             />

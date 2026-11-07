@@ -1,8 +1,8 @@
 # Chennai Real Estates
 
-A production-ready foundation for a single-broker real estate platform focused on **Madipakkam, Chennai**. The project currently delivers the public website and admin dashboard shells, a typed domain model, and a complete route structure.
+A production-ready foundation for a single-broker real estate platform focused on **Madipakkam, Chennai**. The public property website is implemented against typed demo data, alongside the admin dashboard shells, a typed domain model, and a complete route structure.
 
-> **Foundation build only.** Authentication, Supabase, property persistence, and the lead workflow are intentionally not implemented yet. All listings, areas, and contact details are sample content for interface development and must be replaced before launch.
+> **Foundation build only.** Authentication, Supabase, property persistence, image uploads, and the lead workflow are intentionally not implemented yet. All listings, areas, and contact details are sample content for interface development and must be replaced or verified before launch.
 
 ---
 
@@ -59,7 +59,7 @@ cp .env.example .env.local
 Copy-Item .env.example .env.local
 ```
 
-`NEXT_PUBLIC_SITE_URL` falls back to `http://localhost:3000` when unset. No credentials are required to run the foundation build.
+`NEXT_PUBLIC_SITE_URL` falls back to `http://localhost:3000` when unset. `NEXT_PUBLIC_WHATSAPP_NUMBER` is optional; without it the public site shows contact and enquiry fallbacks instead of WhatsApp links. No credentials are required to run the foundation build.
 
 ---
 
@@ -89,12 +89,12 @@ Then open [http://localhost:3000](http://localhost:3000).
 
 | Route | Description |
 | --- | --- |
-| `/` | Homepage with hero, featured listings, area coverage, and contact call-to-action |
-| `/properties` | Property listing page |
-| `/properties/[slug]` | Property detail page |
-| `/areas` | Area directory |
-| `/areas/[slug]` | Area-specific property listings and guide |
-| `/contact` | Contact details and enquiry form preview |
+| `/` | Homepage with hero search, featured listings, popular localities, how-it-works, and contact call-to-action |
+| `/properties` | Property catalogue with working keyword, transaction, locality, category, configuration, bedroom, price, and facing filters |
+| `/properties/[slug]` | Property detail page with gallery placeholders, full specifications, approval warnings, WhatsApp/contact actions, enquiry form, and same-locality listings |
+| `/areas` | Searchable area directory with live property counts |
+| `/areas/[slug]` | Area guide with property listings and sale/rent/lease chips |
+| `/contact` | Contact methods, conditional WhatsApp, and a client-validated demo enquiry form |
 
 ### Admin dashboard
 
@@ -110,6 +110,40 @@ Then open [http://localhost:3000](http://localhost:3000).
 | `/admin/areas` | Area management |
 
 ---
+
+## Demo property catalogue
+
+The public site reads from `src/modules/properties/data/demo-properties.ts`. Nine sample listings are available, with permanent IDs `MAD-0001` through `MAD-0009`:
+
+| ID | Locality | Transaction | Notes |
+| --- | --- | --- | --- |
+| `MAD-0001` | Madipakkam | Sale | Featured 3BHK apartment |
+| `MAD-0002` | Madipakkam | Rent | 2BHK rental |
+| `MAD-0003` | Keelkattalai | Sale | Independent house |
+| `MAD-0004` | Pallikaranai | Sale | 2BHK apartment |
+| `MAD-0005` | Velachery | Rent | 3BHK rental |
+| `MAD-0006` | Madipakkam | Sale | Residential plot |
+| `MAD-0007` | Madipakkam | Lease | 2BHK near Ponniamman Kovil, negotiable |
+| `MAD-0008` | Madipakkam | Lease | 1RK near Ponniamman Kovil |
+| `MAD-0009` | Guperan Nagar, Madipakkam | Sale | 2BHK resale, marked **unapproved** |
+
+`MAD-0007`, `MAD-0008`, and `MAD-0009` are sample/unverified entries. Their original WhatsApp references (`31-10-26-35`, `31-10-26-36`, `04-11-26-11`) are kept in `whatsappReference` and are never used as the permanent ID. Unapproved status is shown prominently on cards and detail pages.
+
+Property media uses labelled SVG illustrations, not photographs. Replace them with broker-supplied images when the media pipeline exists.
+
+---
+
+## WhatsApp enquiries
+
+WhatsApp links are built in `src/lib/whatsapp.ts` from `NEXT_PUBLIC_WHATSAPP_NUMBER`:
+
+- Set the variable to the full international number without spaces or punctuation, for example `919876543210`.
+- Links use `https://wa.me/<number>?text=<encoded message>` and prefill the property ID, title, locality, and visit request.
+- When the variable is unset or invalid, no `wa.me` link is rendered. Buttons fall back to the contact page or the on-page enquiry form instead.
+- No phone number is hardcoded in the source.
+
+---
+
 
 ## Project structure
 
@@ -208,12 +242,13 @@ Typography:
 | Variable | Scope | Status |
 | --- | --- | --- |
 | `NEXT_PUBLIC_SITE_URL` | Public | Used for metadata and canonical site URL |
+| `NEXT_PUBLIC_WHATSAPP_NUMBER` | Public | Optional WhatsApp business number in international format; fallbacks render when unset |
 | `NEXT_PUBLIC_SUPABASE_URL` | Public | Planned — not implemented |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Public | Planned — not implemented |
 | `SUPABASE_SERVICE_ROLE_KEY` | Server only | Planned — never expose to the client |
 | `ADMIN_SESSION_SECRET` | Server only | Planned — not implemented |
 
-Only placeholder names are provided in `.env.example`. Do not commit real secrets.
+`NEXT_PUBLIC_WHATSAPP_NUMBER` is embedded at build time, so rebuild after changing it in a production deployment. Only placeholder names are provided in `.env.example`. Do not commit real secrets.
 
 ---
 
@@ -224,8 +259,8 @@ Only placeholder names are provided in `.env.example`. Do not commit real secret
 3. **Property workflow** — create, edit, publish/unpublish, archive, image uploads, validation.
 4. **Lead capture** — functional enquiry form, property references, status tracking, notifications.
 5. **Area management** — create/edit areas, assign listings, area-level SEO content.
-6. **Search and filters** — budget, property type, bedrooms, listing type, and locality.
-7. **Public experience** — real photography, shortlists, share links, structured data.
+6. **Media and verification** — broker-supplied photography, document review, verified-listing workflow.
+7. **Public experience extras** — saved shortlists, share links, structured data, live availability.
 8. **Operations** — audit trail, backups, analytics, and deployment configuration.
 
 ---
@@ -236,8 +271,11 @@ Only placeholder names are provided in `.env.example`. Do not commit real secret
 - No database, API routes, server actions, or persistence.
 - No image uploads or storage integration.
 - No functional property create/edit/delete workflow.
-- No lead submission or inbox.
-- Listings, areas, and contact details are sample data and placeholder content.
+- No lead submission or inbox. The contact form validates in the browser and shows a demo-only message; it does not send or store anything.
+- Listings, areas, and contact details are sample data and placeholder content. The three supplied Madipakkam entries remain unverified until the broker confirms them.
+- WhatsApp is unavailable until `NEXT_PUBLIC_WHATSAPP_NUMBER` is configured with a real business number.
+- Property images are illustrative SVG placeholders, not photographs of the listed properties.
+- Search and filtering run in memory against the demo data and will move to the data layer with Supabase.
 
 ---
 

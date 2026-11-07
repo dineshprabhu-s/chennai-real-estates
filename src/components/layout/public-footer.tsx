@@ -1,19 +1,22 @@
-import { Clock, Mail, MapPin, Phone } from "lucide-react";
+import { Clock, Mail, MapPin, MessageCircle, Phone } from "lucide-react";
 import Link from "next/link";
 
 import { Container } from "@/components/common/container";
 import { Logo } from "@/components/common/logo";
 import { publicNavigation } from "@/config/navigation";
 import { siteConfig } from "@/config/site";
+import { getGeneralWhatsAppUrl } from "@/lib/whatsapp";
 
 const footerLinkClass =
   "text-sm text-primary-foreground/70 transition-colors hover:text-primary-foreground";
 
 export function PublicFooter() {
+  const whatsappUrl = getGeneralWhatsAppUrl();
+
   return (
     <footer className="border-t border-primary/20 bg-primary text-primary-foreground">
       <Container className="py-14">
-        <div className="grid gap-10 md:grid-cols-2 lg:grid-cols-[1.6fr_1fr_1fr_1.4fr]">
+        <div className="grid grid-cols-1 gap-10 md:grid-cols-2 lg:grid-cols-[1.6fr_1fr_1fr_1.4fr]">
           <div>
             <Logo inverse />
             <p className="mt-5 max-w-sm text-sm leading-relaxed text-primary-foreground/70">
@@ -78,6 +81,22 @@ export function PublicFooter() {
                   {siteConfig.contact.phoneLabel}
                 </a>
               </li>
+              {whatsappUrl ? (
+                <li>
+                  <a
+                    href={whatsappUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-start gap-2.5 transition-colors hover:text-primary-foreground"
+                  >
+                    <MessageCircle
+                      aria-hidden="true"
+                      className="mt-0.5 size-4 shrink-0"
+                    />
+                    WhatsApp
+                  </a>
+                </li>
+              ) : null}
               <li>
                 <a
                   href={siteConfig.contact.emailHref}

@@ -6,28 +6,43 @@ import {
   Building2,
   CalendarDays,
   Check,
+  Compass,
   Mail,
   MapPin,
   Maximize2,
   Phone,
-  UserRound,
+  TriangleAlert,
 } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import type { LucideIcon } from "lucide-react";
 
 import { Container } from "@/components/common/container";
 import { Notice } from "@/components/common/notice";
+import { ContactForm } from "@/components/forms/contact-form";
+import { PropertyGallery } from "@/components/property/property-gallery";
 import { PropertyGrid } from "@/components/property/property-grid";
 import { PropertyStatusBadge } from "@/components/property/property-status-badge";
+import { WhatsAppEnquiryButton } from "@/components/property/whatsapp-enquiry-button";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { siteConfig } from "@/config/site";
-import { formatArea, formatDate, formatFullPrice } from "@/lib/format";
+import {
+  formatArea,
+  formatDate,
+  formatFullPrice,
+} from "@/lib/format";
 import { getAreaBySlug } from "@/modules/areas/queries";
 import {
+  approvalStatusLabels,
+  facingLabels,
+  furnishingLabels,
+  getListingPriceLabel,
   listingTypeLabels,
+  propertyConfigurationLabels,
+  propertyStatusLabels,
   propertyTypeLabels,
 } from "@/modules/properties/constants";
 import {
@@ -36,8 +51,16 @@ import {
   getRelatedProperties,
 } from "@/modules/properties/queries";
 
+export const instant = false;
+
 interface PropertyPageProps {
   params: Promise<{ slug: string }>;
+}
+
+interface QuickFact {
+  label: string;
+  value: string;
+  icon: LucideIcon;
 }
 
 export function generateStaticParams() {
@@ -77,29 +100,117 @@ export default async function PropertyDetailPage({
 
   const area = getAreaBySlug(property.areaSlug);
   const relatedProperties = getRelatedProperties(property, 3);
+  const isUnapproved = property.approvalStatus === "unapproved";
+  const configurationLabel = property.configuration
+    ? propertyConfigurationLabels[property.configuration]
+    : null;
 
-  const facts = [
+  const quickFacts: QuickFact[] = [
     {
-      label: "Property type",
+      label: "Property category",
       value: propertyTypeLabels[property.type],
       icon: Building2,
     },
-    {
-      label: "Bedrooms",
-      value: property.bedrooms !== null ? `${property.bedrooms} BHK` : "—",
+  ];
+
+  if (configurationLabel) {
+    quickFacts.push({
+      label: "Property type",
+      value: configurationLabel,
       icon: BedDouble,
-    },
-    {
+    });
+  }
+
+  if (property.bedrooms !== null) {
+    quickFacts.push({
+      label: "Bedrooms",
+      value: `${property.bedrooms}`,
+      icon: BedDouble,
+    });
+  }
+
+  if (property.bathrooms !== null) {
+    quickFacts.push({
       label: "Bathrooms",
-      value: property.bathrooms !== null ? `${property.bathrooms}` : "—",
+      value: `${property.bathrooms}`,
       icon: Bath,
-    },
-    {
-      label: "Built-up area",
+    });
+  }
+
+  if (property.builtUpAreaSqft !== null) {
+    quickFacts.push({
+      label: property.type === "plot" ? "Plot area" : "Built-up area",
       value: formatArea(property.builtUpAreaSqft),
       icon: Maximize2,
-    },
-  ];
+    });
+  }
+
+  if (property.facing) {
+    quickFacts.push({
+      label: "Facing",
+      value: facingLabels[property.facing],
+      icon: Compass,
+    });
+  }
+
+  const detailRows: Array<{ label: string; value: string }> = [];
+
+  if (property.carpetAreaSqft !== undefined) {
+    detailRows.push({
+      label: "Carpet area",
+      value: formatArea(property.carpetAreaSqft),
+    });
+  }
+
+  if (property.udsSqft !== undefined) {
+    detailRows.push({ label: "UDS", value: formatArea(property.udsSqft) });
+  }
+
+  if (property.floor) {
+    detailRows.push({ label: "Floor", value: property.floor });
+  }
+
+  if (property.buildingAgeYears !== undefined) {
+    detailRows.push({
+      label: "Building age",
+      value: `${property.buildingAgeYears} years`,
+    });
+  }
+
+  if (property.hasLift !== undefined) {
+    detailRows.push({
+      label: "Lift",
+      value: property.hasLift ? "Available" : "Not available",
+    });
+  }
+
+  if (property.parking) {
+    detailRows.push({ label: "Parking", value: property.parking });
+  }
+
+  if (property.furnishing) {
+    detailRows.push({
+      label: "Furnishing",
+      value: furnishingLabels[property.furnishing],
+    });
+  }
+
+  if (property.approvalStatus) {
+    detailRows.push({
+      label: "Approval status",
+      value: approvalStatusLabels[property.approvalStatus],
+    });
+  }
+
+  detailRows.push({
+    label: "Availability",
+    value:
+      property.availabilityNote ?? propertyStatusLabels[property.status],
+  });
+
+  if (property.brokerage) {
+    detailRows.push({ label: "Brokerage", value: property.brokerage });
+  }
 
   return (
     <Container className="py-10 sm:py-14">
@@ -111,12 +222,49 @@ export default async function PropertyDetailPage({
         All properties
       </Link>
 
-      <div className="mt-7">
-        <Notice>
-          This is a sample listing for interface development. Property photos,
-          documents, and verified details will be added with the live data layer.
-        </Notice>
-      </div>
+      {isUnapproved ? (
+        <div
+          role="alert"
+          className="mt-7 flex items-start gap-3 rounded-xl border border-destructive/30 bg-destructive/5 p-4"
+        >
+          <TriangleAlert
+            aria-hidden="true"
+            className="mt-0.5 size-5 shrink-0 text-destructive"
+          />
+          <div>
+            <p className="text-sm font-semibold text-destructive">
+              Unapproved property
+            </p>
+            <p className="mt-1 text-sm leading-relaxed text-foreground/80">
+              This listing is marked as unapproved. Do not treat the property as
+              approved or assume clear documentation. Verify the approval status,
+              plans, and documents directly with the broker and the relevant
+              authority before proceeding.
+            </p>
+          </div>
+        </div>
+      ) : null}
+
+      <Notice className="mt-6">
+        {property.verificationStatus === "sample" ? (
+          <>
+            <strong className="font-semibold text-foreground">
+              Sample, unverified listing.
+            </strong>{" "}
+            The broker&apos;s original WhatsApp reference is{" "}
+            <span className="font-mono">{property.whatsappReference}</span>, kept
+            separate from permanent ID {property.id}. Confirm current
+            availability, price, measurements, and approval details before
+            acting on it.
+          </>
+        ) : (
+          <>
+            This is a sample listing for interface development. Property
+            photographs, documents, and verified details will be added with the
+            live data layer.
+          </>
+        )}
+      </Notice>
 
       <header className="mt-8 border-b border-border pb-8">
         <div className="flex flex-wrap items-center gap-2">
@@ -126,17 +274,42 @@ export default async function PropertyDetailPage({
           <Badge variant="outline">
             {propertyTypeLabels[property.type]}
           </Badge>
+          {configurationLabel ? (
+            <Badge variant="outline">{configurationLabel}</Badge>
+          ) : null}
           <PropertyStatusBadge status={property.status} />
+          {property.approvalStatus ? (
+            <Badge
+              variant={
+                property.approvalStatus === "unapproved"
+                  ? "destructive"
+                  : property.approvalStatus === "approved"
+                    ? "success"
+                    : "outline"
+              }
+            >
+              {approvalStatusLabels[property.approvalStatus]}
+            </Badge>
+          ) : null}
         </div>
 
-        <div className="mt-4 flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+        <div className="mt-5 flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
           <div className="max-w-3xl">
-            <h1 className="font-display text-4xl leading-[1.1] tracking-tight text-foreground sm:text-5xl">
+            <p className="font-mono text-xs font-medium tracking-wide text-muted-foreground">
+              Property ID {property.id}
+            </p>
+            <h1 className="mt-2 font-display text-4xl leading-[1.1] tracking-tight text-foreground sm:text-5xl">
               {property.title}
             </h1>
-            <p className="mt-4 flex items-center gap-2 text-sm text-muted-foreground">
+            <p className="mt-4 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground">
               <MapPin aria-hidden="true" className="size-4 text-primary" />
-              {property.locality}, Chennai
+              <span>{property.locality}, Chennai</span>
+              {property.landmark ? (
+                <>
+                  <span aria-hidden="true">·</span>
+                  <span>{property.landmark}</span>
+                </>
+              ) : null}
               {area ? (
                 <>
                   <span aria-hidden="true">·</span>
@@ -152,44 +325,21 @@ export default async function PropertyDetailPage({
           </div>
           <div className="shrink-0">
             <p className="text-xs font-medium tracking-[0.14em] text-muted-foreground uppercase">
-              {property.listingType === "rent" ? "Monthly rent" : "Guide price"}
+              {getListingPriceLabel(property.listingType)}
             </p>
             <p className="mt-1 text-3xl font-semibold tracking-tight text-foreground">
               {formatFullPrice(property.price, property.listingType)}
             </p>
+            {property.priceNegotiable ? (
+              <p className="mt-1 text-sm font-medium text-primary">Negotiable</p>
+            ) : null}
           </div>
         </div>
       </header>
 
-      <div className="mt-10 grid gap-10 lg:grid-cols-[1fr_360px] lg:items-start">
+      <div className="mt-10 grid grid-cols-1 gap-10 lg:grid-cols-[1fr_380px] lg:items-start">
         <div className="space-y-10">
-          <div className="relative aspect-[16/9] overflow-hidden rounded-xl border border-border bg-secondary">
-            <div
-              aria-hidden="true"
-              className="absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,rgba(30,77,58,0.12),transparent_55%)]"
-            />
-            <div
-              aria-hidden="true"
-              className="absolute -right-16 -bottom-20 size-80 rounded-full border border-primary/10"
-            />
-            <div
-              aria-hidden="true"
-              className="absolute right-16 bottom-10 size-40 rounded-full border border-primary/10"
-            />
-            <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
-              <Building2
-                aria-hidden="true"
-                strokeWidth={1}
-                className="size-14 text-primary/30"
-              />
-              <p className="mt-4 text-sm font-medium text-foreground">
-                Property photography placeholder
-              </p>
-              <p className="mt-1 text-xs text-muted-foreground">
-                Photos will be added with the live listing.
-              </p>
-            </div>
-          </div>
+          <PropertyGallery type={property.type} />
 
           <section aria-labelledby="about-property">
             <h2
@@ -217,8 +367,8 @@ export default async function PropertyDetailPage({
             >
               Property details
             </h2>
-            <dl className="mt-4 grid gap-4 sm:grid-cols-2">
-              {facts.map((fact) => (
+            <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+              {quickFacts.map((fact) => (
                 <div
                   key={fact.label}
                   className="flex items-center gap-4 rounded-lg border border-border bg-card p-4"
@@ -227,44 +377,62 @@ export default async function PropertyDetailPage({
                     <fact.icon aria-hidden="true" className="size-4" />
                   </span>
                   <div>
-                    <dt className="text-xs text-muted-foreground">
-                      {fact.label}
-                    </dt>
-                    <dd className="mt-0.5 text-sm font-semibold text-foreground">
+                    <p className="text-xs text-muted-foreground">{fact.label}</p>
+                    <p className="mt-0.5 text-sm font-semibold text-foreground">
                       {fact.value}
-                    </dd>
+                    </p>
                   </div>
                 </div>
               ))}
-            </dl>
+            </div>
+
+            {detailRows.length > 0 ? (
+              <dl className="mt-4 divide-y divide-border overflow-hidden rounded-lg border border-border bg-card">
+                {detailRows.map((row) => (
+                  <div
+                    key={row.label}
+                    className="grid grid-cols-1 gap-1 px-4 py-3 sm:grid-cols-[1fr_1.4fr] sm:gap-4"
+                  >
+                    <dt className="text-xs text-muted-foreground">{row.label}</dt>
+                    <dd className="text-sm font-medium text-foreground">
+                      {row.value}
+                    </dd>
+                  </div>
+                ))}
+              </dl>
+            ) : null}
+
             <p className="mt-4 flex items-center gap-2 text-xs text-muted-foreground">
               <CalendarDays aria-hidden="true" className="size-3.5" />
-              Listed on {formatDate(property.listedAt)}
+              Listed on {formatDate(property.listedAt)} · Updated{" "}
+              {formatDate(property.updatedAt)}
             </p>
           </section>
 
-          <section aria-labelledby="property-features">
-            <h2
-              id="property-features"
-              className="text-xl font-semibold tracking-tight text-foreground"
-            >
-              Features
-            </h2>
-            <ul className="mt-4 grid gap-3 sm:grid-cols-2">
-              {property.features.map((feature) => (
-                <li
-                  key={feature}
-                  className="flex items-start gap-2.5 text-sm text-muted-foreground"
-                >
-                  <Check
-                    aria-hidden="true"
-                    className="mt-0.5 size-4 shrink-0 text-primary"
-                  />
-                  {feature}
-                </li>
-              ))}
-            </ul>
-          </section>
+          {property.features.length > 0 ? (
+            <section aria-labelledby="property-features">
+              <h2
+                id="property-features"
+                className="text-xl font-semibold tracking-tight text-foreground"
+              >
+                Features and notes
+              </h2>
+              <ul className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                {property.features.map((feature) => (
+                  <li
+                    key={feature}
+                    className="flex items-start gap-2.5 text-sm text-muted-foreground"
+                  >
+                    <Check
+                      aria-hidden="true"
+                      className="mt-0.5 size-4 shrink-0 text-primary"
+                    />
+                    {feature}
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ) : null}
 
           {area ? (
             <section aria-labelledby="area-context">
@@ -301,15 +469,20 @@ export default async function PropertyDetailPage({
           ) : null}
         </div>
 
-        <aside className="space-y-4 lg:sticky lg:top-24">
+        <aside className="space-y-4">
           <Card className="gap-5 p-6">
             <div>
               <p className="text-xs font-medium tracking-[0.14em] text-muted-foreground uppercase">
-                {property.listingType === "rent" ? "Monthly rent" : "Guide price"}
+                {getListingPriceLabel(property.listingType)}
               </p>
               <p className="mt-1 text-2xl font-semibold tracking-tight text-foreground">
                 {formatFullPrice(property.price, property.listingType)}
               </p>
+              {property.priceNegotiable ? (
+                <p className="mt-1 text-sm font-medium text-primary">
+                  Negotiable
+                </p>
+              ) : null}
             </div>
 
             <div className="rounded-lg bg-muted/60 p-4">
@@ -333,19 +506,25 @@ export default async function PropertyDetailPage({
             </div>
 
             <div className="flex flex-col gap-2">
-              <Button asChild>
-                <Link href={siteConfig.links.contact}>
-                  <UserRound aria-hidden="true" />
-                  Enquire about this property
-                </Link>
-              </Button>
-              <Button asChild variant="outline">
+              <WhatsAppEnquiryButton
+                property={property}
+                label="Enquire on WhatsApp"
+                fallbackLabel="Enquire about this property"
+                fallbackHref="#enquiry-form"
+                size="default"
+                className="w-full"
+              />
+              <Button asChild variant="outline" className="w-full">
                 <a href={siteConfig.contact.phoneHref}>
                   <Phone aria-hidden="true" />
                   {siteConfig.contact.phoneLabel}
                 </a>
               </Button>
-              <Button asChild variant="ghost">
+              <Button
+                asChild
+                variant="ghost"
+                className="h-auto min-h-9 w-full py-2 whitespace-normal break-all"
+              >
                 <a href={siteConfig.contact.emailHref}>
                   <Mail aria-hidden="true" />
                   {siteConfig.contact.email}
@@ -353,31 +532,58 @@ export default async function PropertyDetailPage({
               </Button>
             </div>
 
+            <div
+              id="enquiry-form"
+              className="border-t border-border pt-5 scroll-mt-24"
+            >
+              <h2 className="font-display text-2xl tracking-tight text-foreground">
+                Ask about this property
+              </h2>
+              <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                The form validates in your browser and shows a demo message only.
+                It does not send or store an enquiry.
+              </p>
+              <ContactForm
+                key={property.id}
+                property={property}
+                compact
+                className="mt-4"
+              />
+            </div>
+
             <p className="text-xs leading-relaxed text-muted-foreground">
-              Reference: {property.id.toUpperCase()} · Updated{" "}
+              Reference: {property.id} · Updated{" "}
               {formatDate(property.updatedAt)}
             </p>
           </Card>
 
           <Notice>
             Contact details and this listing are placeholders for the foundation
-            build.
+            build. Verify everything directly with the broker.
           </Notice>
         </aside>
       </div>
 
       {relatedProperties.length > 0 ? (
-        <section aria-labelledby="related-properties" className="mt-16 border-t border-border pt-10">
+        <section
+          aria-labelledby="related-properties"
+          className="mt-16 border-t border-border pt-10"
+        >
           <div className="flex flex-wrap items-end justify-between gap-4">
-            <h2
-              id="related-properties"
-              className="font-display text-3xl tracking-tight text-foreground"
-            >
-              You may also like
-            </h2>
+            <div>
+              <h2
+                id="related-properties"
+                className="font-display text-3xl tracking-tight text-foreground"
+              >
+                More properties in {area?.name ?? property.locality}
+              </h2>
+              <p className="mt-2 text-sm text-muted-foreground">
+                Similar listings from the same locality.
+              </p>
+            </div>
             <Button asChild variant="outline" size="sm">
-              <Link href="/properties">
-                View all properties
+              <Link href={`/properties?areaSlug=${property.areaSlug}`}>
+                View all in this area
                 <ArrowRight aria-hidden="true" />
               </Link>
             </Button>

@@ -59,6 +59,15 @@ export function formatFullPrice(
   return listingType === "rent" ? `${price} per month` : price;
 }
 
+/** Label for areas that may be missing from a source listing. */
+export function formatOptionalArea(
+  squareFeet: number | null | undefined,
+): string | null {
+  return squareFeet === null || squareFeet === undefined
+    ? null
+    : formatArea(squareFeet);
+}
+
 export function formatArea(squareFeet: number): string {
   return `${numberFormatter.format(squareFeet)} sq ft`;
 }

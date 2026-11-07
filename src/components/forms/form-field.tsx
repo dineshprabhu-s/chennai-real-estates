@@ -7,6 +7,8 @@ interface FormFieldProps {
   label: string;
   htmlFor: string;
   hint?: string;
+  error?: string;
+  errorId?: string;
   required?: boolean;
   className?: string;
   children: React.ReactNode;
@@ -16,6 +18,8 @@ export function FormField({
   label,
   htmlFor,
   hint,
+  error,
+  errorId,
   required = false,
   className,
   children,
@@ -27,15 +31,21 @@ export function FormField({
           {label}
           {required ? (
             <span aria-hidden="true" className="text-destructive">
+              {" "}
               *
             </span>
           ) : null}
         </Label>
-        {hint ? (
+        {hint && !error ? (
           <span className="text-xs text-muted-foreground">{hint}</span>
         ) : null}
       </div>
       {children}
+      {error ? (
+        <p id={errorId} className="text-xs font-medium text-destructive">
+          {error}
+        </p>
+      ) : null}
     </div>
   );
 }

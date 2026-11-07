@@ -37,6 +37,10 @@ export function getPropertyById(id: string): Property | undefined {
   return getAllProperties().find((property) => property.id === id);
 }
 
+export function getPublicPropertyById(id: string): Property | undefined {
+  return getPublicProperties().find((property) => property.id === id);
+}
+
 export function getPropertiesByArea(areaSlug: string): Property[] {
   return getPublicProperties().filter(
     (property) => property.areaSlug === areaSlug,
@@ -48,17 +52,18 @@ export function getRelatedProperties(
   limit = 3,
 ): Property[] {
   return getPublicProperties()
-    .filter((candidate) => candidate.id !== property.id)
-    .map((candidate) => ({
-      property: candidate,
-      score:
-        (candidate.areaSlug === property.areaSlug ? 2 : 0) +
-        (candidate.type === property.type ? 1 : 0),
-    }))
-    .filter(({ score }) => score > 0)
-    .sort((a, b) => b.score - a.score)
-    .slice(0, Math.max(0, limit))
-    .map(({ property: related }) => related);
+    .filter(
+      (candidate) =>
+        candidate.id !== property.id &&
+        candidate.areaSlug === property.areaSlug,
+    )
+    .sort((a, b) => {
+      const typeScore =
+        Number(b.type === property.type) - Number(a.type === property.type);
+
+      return typeScore || b.updatedAt.localeCompare(a.updatedAt);
+    })
+    .slice(0, Math.max(0, limit));
 }
 
 export interface PropertyStats {

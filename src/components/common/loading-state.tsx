@@ -26,7 +26,7 @@ export function LoadingState({
         <Skeleton className="h-10 w-full max-w-md" />
         <Skeleton className="h-4 w-full max-w-xl" />
       </div>
-      <div className="mt-10 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="mt-10 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
         {Array.from({ length: 6 }).map((_, index) => (
           <div key={index} className="rounded-xl border border-border bg-card p-0">
             <Skeleton className="aspect-[4/3] w-full rounded-b-none" />

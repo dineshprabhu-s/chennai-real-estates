@@ -1,34 +1,51 @@
+import { RotateCcw } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 
 import { Container } from "@/components/common/container";
 import { Notice } from "@/components/common/notice";
 import { PageHeader } from "@/components/common/page-header";
+import { PropertyFiltersForm } from "@/components/property/property-filters";
 import { PropertyGrid } from "@/components/property/property-grid";
 import { Button } from "@/components/ui/button";
 import { siteConfig } from "@/config/site";
 import { getPublicAreasWithCounts } from "@/modules/areas/queries";
+import {
+  countActivePropertyFilters,
+  filterProperties,
+  parsePropertyFilters,
+  type PropertySearchParams,
+} from "@/modules/properties/filters";
 import { getPublicProperties } from "@/modules/properties/queries";
+
+export const instant = false;
 
 export const metadata: Metadata = {
   title: "Properties",
   description:
-    "Browse sample property listings in Madipakkam, Keelkattalai, Pallikaranai, and Velachery. Apartments, independent houses, and plots with direct broker guidance.",
+    "Browse sale, rent, and lease properties in Madipakkam, Keelkattalai, Pallikaranai, and Velachery with direct broker guidance.",
 };
 
-const areaChipClass =
-  "rounded-full border border-border bg-background px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:border-primary/30 hover:text-primary";
+interface PropertiesPageProps {
+  searchParams: Promise<PropertySearchParams>;
+}
 
-export default function PropertiesPage() {
-  const properties = getPublicProperties();
+export default async function PropertiesPage({
+  searchParams,
+}: PropertiesPageProps) {
+  const params = await searchParams;
+  const filters = parsePropertyFilters(params);
+  const allProperties = getPublicProperties();
+  const properties = filterProperties(allProperties, filters);
+  const activeFilterCount = countActivePropertyFilters(filters);
   const areas = getPublicAreasWithCounts();
 
   return (
     <Container className="py-12 sm:py-16">
       <PageHeader
-        eyebrow="Properties"
+        eyebrow="Property catalogue"
         title="Homes in and around Madipakkam"
-        description="A focused set of apartments, independent houses, and plots. Each listing is presented with the details that matter before you pick up the phone."
+        description="Browse sale, rent, and lease listings with the details that matter before a visit: locality, configuration, price, area, facing, and approval status where known."
         actions={
           <Button asChild>
             <Link href={siteConfig.links.contact}>Talk to the broker</Link>
@@ -37,24 +54,43 @@ export default function PropertiesPage() {
       />
 
       <Notice className="mt-8">
-        Listings on this page are sample content for interface development. Real
-        properties will replace them once the property data layer is connected.
+        Listings are sample data for interface development. Availability,
+        prices, measurements, and approval status must be verified with the
+        broker before you act on a listing.
       </Notice>
 
-      <div className="mt-8 flex flex-col gap-4 border-b border-border pb-8 sm:flex-row sm:items-center sm:justify-between">
-        <p className="text-sm text-muted-foreground">
-          Showing{" "}
-          <span className="font-semibold text-foreground">
-            {properties.length}
-          </span>{" "}
-          {properties.length === 1 ? "sample listing" : "sample listings"}
-        </p>
-        <div className="flex flex-wrap gap-2">
+      <PropertyFiltersForm
+        areas={areas}
+        filters={filters}
+        className="mt-8"
+      />
+
+      <div className="mt-8 flex flex-col gap-3 border-b border-border pb-6 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <p className="text-sm text-muted-foreground">
+            Showing{" "}
+            <span className="font-semibold text-foreground">
+              {properties.length}
+            </span>{" "}
+            of{" "}
+            <span className="font-semibold text-foreground">
+              {allProperties.length}
+            </span>{" "}
+            {allProperties.length === 1 ? "property" : "properties"}
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {activeFilterCount > 0
+              ? `${activeFilterCount} ${activeFilterCount === 1 ? "filter" : "filters"} applied`
+              : "All current catalogue entries"}
+          </p>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
           {areas.map((area) => (
             <Link
               key={area.slug}
-              href={`/areas/${area.slug}`}
-              className={areaChipClass}
+              href={`/properties?areaSlug=${area.slug}`}
+              className="rounded-full border border-border bg-background px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:border-primary/30 hover:text-primary"
             >
               {area.name}
             </Link>
@@ -63,10 +99,18 @@ export default function PropertiesPage() {
       </div>
 
       <PropertyGrid
-        className="mt-10"
+        className="mt-8"
         properties={properties}
-        emptyTitle="No listings yet"
-        emptyDescription="New properties will appear here once they are published."
+        emptyTitle="No properties match these filters"
+        emptyDescription="Try a broader locality, a different transaction type, or clear the price range."
+        emptyAction={
+          <Button asChild variant="outline">
+            <Link href="/properties">
+              <RotateCcw aria-hidden="true" />
+              Clear filters
+            </Link>
+          </Button>
+        }
       />
     </Container>
   );
