@@ -17,7 +17,7 @@ import { ContactForm } from "@/components/forms/contact-form";
 import { Card } from "@/components/ui/card";
 import { siteConfig } from "@/config/site";
 import { getGeneralWhatsAppUrl } from "@/lib/whatsapp";
-import { getPublicPropertyById } from "@/modules/properties/queries";
+import { getPublicPropertyById } from "@/lib/supabase/queries/properties";
 
 export const instant = false;
 
@@ -47,7 +47,7 @@ export default async function ContactPage({ searchParams }: ContactPageProps) {
   const params = await searchParams;
   const propertyId = firstValue(params.property);
   const property = propertyId
-    ? getPublicPropertyById(propertyId)
+    ? (await getPublicPropertyById(propertyId)) ?? undefined
     : undefined;
   const whatsappUrl = getGeneralWhatsAppUrl();
 

@@ -36,7 +36,7 @@ export function PropertyGallery({ type }: PropertyGalleryProps) {
         </div>
       </div>
       <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
-        Gallery images are illustrations for this sample listing. Actual property
+        Gallery images are illustrations. Actual property
         photographs will be added once the broker confirms the listing.
       </p>
     </div>

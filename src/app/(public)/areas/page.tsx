@@ -9,7 +9,9 @@ import { Notice } from "@/components/common/notice";
 import { PageHeader } from "@/components/common/page-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { getPublicAreasWithCounts } from "@/modules/areas/queries";
+import { getPublicAreas } from "@/lib/supabase/queries/areas";
+import { getPublicProperties } from "@/lib/supabase/queries/properties";
+import { withPublicPropertyCounts } from "@/modules/areas/public-presentation";
 
 export const instant = false;
 
@@ -33,7 +35,8 @@ export default async function AreasPage({ searchParams }: AreasPageProps) {
   const params = await searchParams;
   const query = firstValue(params.q).slice(0, 80);
   const normalizedQuery = query.toLowerCase();
-  const allAreas = getPublicAreasWithCounts();
+  const [publicAreas, properties] = await Promise.all([getPublicAreas(), getPublicProperties()]);
+  const allAreas = withPublicPropertyCounts(publicAreas, properties);
   const areas = normalizedQuery
     ? allAreas.filter((area) =>
         [area.name, area.pincode, area.summary, area.description]
@@ -52,8 +55,8 @@ export default async function AreasPage({ searchParams }: AreasPageProps) {
       />
 
       <Notice className="mt-8">
-        Area guides are sample content for interface development. Property counts
-        reflect the current demo catalogue; verify local details independently
+        Property counts
+        reflect public listings; verify local details independently
         before making a decision.
       </Notice>
 

@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
+import { connection } from "next/server";
 
 import { AreaCard } from "@/components/areas/area-card";
 import { Container } from "@/components/common/container";
@@ -22,12 +23,13 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { siteConfig } from "@/config/site";
 import { formatPrice } from "@/lib/format";
-import { getPublicAreasWithCounts } from "@/modules/areas/queries";
+import { getPublicAreas } from "@/lib/supabase/queries/areas";
+import { getFeaturedProperties, getPublicProperties } from "@/lib/supabase/queries/properties";
+import { withPublicPropertyCounts } from "@/modules/areas/public-presentation";
 import {
   getListingPriceLabel,
   listingTypeLabels,
 } from "@/modules/properties/constants";
-import { getFeaturedProperties } from "@/modules/properties/queries";
 
 export const metadata: Metadata = {
   title: "Find your next home in Chennai",
@@ -62,10 +64,13 @@ const steps = [
   },
 ] as const;
 
-export default function HomePage() {
-  const featuredProperties = getFeaturedProperties(3);
+export default async function HomePage() {
+  await connection();
+  const [featuredProperties, publicAreas, properties] = await Promise.all([
+    getFeaturedProperties(3), getPublicAreas(), getPublicProperties(),
+  ]);
   const heroProperty = featuredProperties[0];
-  const areas = getPublicAreasWithCounts();
+  const areas = withPublicPropertyCounts(publicAreas, properties);
 
   return (
     <>
@@ -188,7 +193,7 @@ export default function HomePage() {
             }
           />
           <p className="mt-4 text-xs text-muted-foreground">
-            Sample data for interface development · Verify availability and
+            Verify availability and
             details with the broker.
           </p>
           <PropertyGrid className="mt-8" properties={featuredProperties} />

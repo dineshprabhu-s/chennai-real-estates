@@ -5,11 +5,6 @@ import {
   applySupabaseResponse,
   createSupabaseProxyClient,
 } from "@/lib/supabase/proxy";
-import { getAreaBySlug } from "@/modules/areas/queries";
-import { getPropertyBySlug } from "@/modules/properties/queries";
-
-const propertyPath = /^\/properties\/([^/]+)\/?$/;
-const areaPath = /^\/areas\/([^/]+)\/?$/;
 const loginPath = /^\/admin\/login\/?$/;
 
 function isAdminPath(pathname: string): boolean {
@@ -70,12 +65,7 @@ async function handleAdminRequest(request: NextRequest): Promise<NextResponse> {
 }
 
 /**
- * Unknown property and area slugs must return a real 404. Because those routes
- * are partially prerendered, calling notFound() inside the page can happen
- * after the response has started streaming and keep the 200 status. Checking
- * the slug here, before rendering, keeps the status correct.
- *
- * The proxy also refreshes Supabase sessions and performs an optimistic broker
+ * The proxy refreshes Supabase sessions and performs an optimistic broker
  * check for admin routes. Page-level and Server Action guards remain the
  * authoritative authorization boundary.
  */
@@ -84,22 +74,6 @@ export async function proxy(request: NextRequest) {
 
   if (isAdminPath(pathname)) {
     return handleAdminRequest(request);
-  }
-
-  const propertyMatch = pathname.match(propertyPath);
-  const propertySlug = propertyMatch?.[1];
-  if (propertySlug && !getPropertyBySlug(propertySlug)) {
-    return NextResponse.rewrite(new URL("/_not-found", request.url), {
-      status: 404,
-    });
-  }
-
-  const areaMatch = pathname.match(areaPath);
-  const areaSlug = areaMatch?.[1];
-  if (areaSlug && !getAreaBySlug(areaSlug)) {
-    return NextResponse.rewrite(new URL("/_not-found", request.url), {
-      status: 404,
-    });
   }
 
   return NextResponse.next();

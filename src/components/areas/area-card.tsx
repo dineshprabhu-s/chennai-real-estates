@@ -4,10 +4,10 @@ import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
-import type { AreaWithCounts } from "@/modules/areas/queries";
+import type { Area } from "@/types/area";
 
 interface AreaCardProps {
-  area: AreaWithCounts;
+  area: Area & { publicPropertyCount: number };
   featured?: boolean;
   className?: string;
 }

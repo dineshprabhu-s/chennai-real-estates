@@ -11,15 +11,12 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { siteConfig } from "@/config/site";
-import {
-  getAreaBySlug,
-  getPublicAreasWithCounts,
-} from "@/modules/areas/queries";
+import { getPublicAreaBySlug } from "@/lib/supabase/queries/areas";
 import {
   listingTypeLabels,
   listingTypeOptions,
 } from "@/modules/properties/constants";
-import { getPropertiesByArea } from "@/modules/properties/queries";
+import { getPublicPropertiesByArea } from "@/lib/supabase/queries/properties";
 import type { ListingType } from "@/types/property";
 import { cn } from "@/lib/utils";
 
@@ -28,10 +25,6 @@ export const instant = false;
 interface AreaPageProps {
   params: Promise<{ slug: string }>;
   searchParams: Promise<Record<string, string | string[] | undefined>>;
-}
-
-export function generateStaticParams() {
-  return getPublicAreasWithCounts().map((area) => ({ slug: area.slug }));
 }
 
 function parseListingType(
@@ -50,7 +43,7 @@ export async function generateMetadata({
   params,
 }: AreaPageProps): Promise<Metadata> {
   const { slug } = await params;
-  const area = getAreaBySlug(slug);
+  const area = await getPublicAreaBySlug(slug);
 
   if (!area) {
     return { title: "Area not found" };
@@ -73,14 +66,14 @@ export default async function AreaDetailPage({
 }: AreaPageProps) {
   const { slug } = await params;
   const query = await searchParams;
-  const area = getAreaBySlug(slug);
+  const area = await getPublicAreaBySlug(slug);
 
   if (!area) {
     notFound();
   }
 
   const selectedListingType = parseListingType(query.listingType);
-  const allProperties = getPropertiesByArea(area.slug);
+  const allProperties = await getPublicPropertiesByArea(area.slug);
   const properties = selectedListingType
     ? allProperties.filter(
         (property) => property.listingType === selectedListingType,
@@ -161,7 +154,6 @@ export default async function AreaDetailPage({
         </Card>
 
         <Notice>
-          Area notes and listings are sample content for the foundation build.
           Verify schools, transport, property details, and approval status
           independently before making a decision.
         </Notice>

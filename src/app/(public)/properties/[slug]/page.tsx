@@ -34,7 +34,7 @@ import {
   formatDate,
   formatFullPrice,
 } from "@/lib/format";
-import { getAreaBySlug } from "@/modules/areas/queries";
+import { getPublicAreaBySlug } from "@/lib/supabase/queries/areas";
 import {
   approvalStatusLabels,
   facingLabels,
@@ -46,10 +46,9 @@ import {
   propertyTypeLabels,
 } from "@/modules/properties/constants";
 import {
-  getAllProperties,
-  getPropertyBySlug,
-  getRelatedProperties,
-} from "@/modules/properties/queries";
+  getPublicPropertyBySlug,
+  getPublicPropertiesByArea,
+} from "@/lib/supabase/queries/properties";
 
 export const instant = false;
 
@@ -63,15 +62,11 @@ interface QuickFact {
   icon: LucideIcon;
 }
 
-export function generateStaticParams() {
-  return getAllProperties().map((property) => ({ slug: property.slug }));
-}
-
 export async function generateMetadata({
   params,
 }: PropertyPageProps): Promise<Metadata> {
   const { slug } = await params;
-  const property = getPropertyBySlug(slug);
+  const property = await getPublicPropertyBySlug(slug);
 
   if (!property) {
     return { title: "Property not found" };
@@ -92,14 +87,23 @@ export default async function PropertyDetailPage({
   params,
 }: PropertyPageProps) {
   const { slug } = await params;
-  const property = getPropertyBySlug(slug);
+  const property = await getPublicPropertyBySlug(slug);
 
   if (!property) {
     notFound();
   }
 
-  const area = getAreaBySlug(property.areaSlug);
-  const relatedProperties = getRelatedProperties(property, 3);
+  const [area, areaProperties] = await Promise.all([
+    getPublicAreaBySlug(property.areaSlug),
+    getPublicPropertiesByArea(property.areaSlug),
+  ]);
+  const relatedProperties = areaProperties
+    .filter((candidate) => candidate.id !== property.id)
+    .sort((a, b) =>
+      Number(b.type === property.type) - Number(a.type === property.type) ||
+      b.updatedAt.localeCompare(a.updatedAt) || a.id.localeCompare(b.id),
+    )
+    .slice(0, 3);
   const isUnapproved = property.approvalStatus === "unapproved";
   const configurationLabel = property.configuration
     ? propertyConfigurationLabels[property.configuration]
@@ -251,17 +255,14 @@ export default async function PropertyDetailPage({
             <strong className="font-semibold text-foreground">
               Sample, unverified listing.
             </strong>{" "}
-            The broker&apos;s original WhatsApp reference is{" "}
-            <span className="font-mono">{property.whatsappReference}</span>, kept
-            separate from permanent ID {property.id}. Confirm current
+            Property ID {property.id}. Confirm current
             availability, price, measurements, and approval details before
             acting on it.
           </>
         ) : (
           <>
-            This is a sample listing for interface development. Property
-            photographs, documents, and verified details will be added with the
-            live data layer.
+            Confirm current availability, price, measurements, and approval
+            details with the broker before acting on this listing.
           </>
         )}
       </Notice>
@@ -558,8 +559,8 @@ export default async function PropertyDetailPage({
           </Card>
 
           <Notice>
-            Contact details and this listing are placeholders for the foundation
-            build. Verify everything directly with the broker.
+            Contact details are placeholders for the foundation build.
+            Verify everything directly with the broker.
           </Notice>
         </aside>
       </div>

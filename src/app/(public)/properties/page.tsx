@@ -9,14 +9,15 @@ import { PropertyFiltersForm } from "@/components/property/property-filters";
 import { PropertyGrid } from "@/components/property/property-grid";
 import { Button } from "@/components/ui/button";
 import { siteConfig } from "@/config/site";
-import { getPublicAreasWithCounts } from "@/modules/areas/queries";
+import { getPublicAreas } from "@/lib/supabase/queries/areas";
+import { getPublicProperties } from "@/lib/supabase/queries/properties";
+import { orderPublicAreas } from "@/modules/areas/public-presentation";
 import {
   countActivePropertyFilters,
   filterProperties,
   parsePropertyFilters,
   type PropertySearchParams,
 } from "@/modules/properties/filters";
-import { getPublicProperties } from "@/modules/properties/queries";
 
 export const instant = false;
 
@@ -35,10 +36,10 @@ export default async function PropertiesPage({
 }: PropertiesPageProps) {
   const params = await searchParams;
   const filters = parsePropertyFilters(params);
-  const allProperties = getPublicProperties();
+  const [allProperties, publicAreas] = await Promise.all([getPublicProperties(), getPublicAreas()]);
   const properties = filterProperties(allProperties, filters);
   const activeFilterCount = countActivePropertyFilters(filters);
-  const areas = getPublicAreasWithCounts();
+  const areas = orderPublicAreas(publicAreas);
 
   return (
     <Container className="py-12 sm:py-16">
@@ -54,7 +55,7 @@ export default async function PropertiesPage({
       />
 
       <Notice className="mt-8">
-        Listings are sample data for interface development. Availability,
+        Availability,
         prices, measurements, and approval status must be verified with the
         broker before you act on a listing.
       </Notice>
