@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 
 import { AdminPageHeader } from "@/components/admin/admin-page-header";
 import { Notice } from "@/components/common/notice";
+import { requireBroker } from "@/lib/auth/broker";
 import { getAreasWithCounts } from "@/modules/areas/queries";
 
 import { AdminAreasClient } from "./admin-areas-client";
@@ -10,7 +11,12 @@ export const metadata: Metadata = {
   title: "Areas",
 };
 
-export default function AdminAreasPage() {
+// Session-guarded admin pages are allowed to block during navigation.
+export const instant = false;
+
+export default async function AdminAreasPage() {
+  await requireBroker();
+
   const areas = getAreasWithCounts();
 
   return (

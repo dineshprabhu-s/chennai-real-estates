@@ -5,6 +5,7 @@ import Link from "next/link";
 import { AdminPageHeader } from "@/components/admin/admin-page-header";
 import { Notice } from "@/components/common/notice";
 import { Button } from "@/components/ui/button";
+import { requireBroker } from "@/lib/auth/broker";
 import { getAreasWithCounts } from "@/modules/areas/queries";
 import { getAllProperties } from "@/modules/properties/queries";
 
@@ -14,7 +15,12 @@ export const metadata: Metadata = {
   title: "Properties",
 };
 
-export default function AdminPropertiesPage() {
+// Session-guarded admin pages are allowed to block during navigation.
+export const instant = false;
+
+export default async function AdminPropertiesPage() {
+  await requireBroker();
+
   const properties = getAllProperties();
   const areas = getAreasWithCounts().map((area) => ({
     slug: area.slug,

@@ -1,6 +1,7 @@
 import "server-only";
 
 import { redirect } from "next/navigation";
+import { connection } from "next/server";
 import { cache } from "react";
 
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -24,6 +25,12 @@ type BrokerSession =
  * lookup to once per render pass.
  */
 const getBrokerSession = cache(async (): Promise<BrokerSession> => {
+  // Supabase checks JWT expiry with `Date.now()` inside `getClaims()`. Without
+  // a request boundary that check can run while Next.js is prerendering the
+  // route, which fails with the unstable `Date.now()` error. `connection()`
+  // keeps the session read in request scope. In a Server Action it is a no-op.
+  await connection();
+
   const supabase = await createSupabaseServerClient();
   const { data, error } = await supabase.auth.getClaims();
 

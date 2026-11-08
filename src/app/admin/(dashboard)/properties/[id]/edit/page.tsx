@@ -5,18 +5,15 @@ import { AdminPageHeader } from "@/components/admin/admin-page-header";
 import { Notice } from "@/components/common/notice";
 import { PropertyForm } from "@/components/forms/property-form";
 import { Card } from "@/components/ui/card";
+import { requireBroker } from "@/lib/auth/broker";
 import { getAreasWithCounts } from "@/modules/areas/queries";
-import {
-  getAllProperties,
-  getPropertyById,
-} from "@/modules/properties/queries";
+import { getPropertyById } from "@/modules/properties/queries";
+
+// Session-guarded admin pages are allowed to block during navigation.
+export const instant = false;
 
 interface EditPropertyPageProps {
   params: Promise<{ id: string }>;
-}
-
-export function generateStaticParams() {
-  return getAllProperties().map((property) => ({ id: property.id }));
 }
 
 export async function generateMetadata({
@@ -33,6 +30,8 @@ export async function generateMetadata({
 export default async function EditPropertyPage({
   params,
 }: EditPropertyPageProps) {
+  await requireBroker();
+
   const { id } = await params;
   const property = getPropertyById(id);
 

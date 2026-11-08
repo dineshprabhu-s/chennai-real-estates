@@ -9,7 +9,13 @@ import { cn } from "@/lib/utils";
 
 const STORAGE_KEY = "cre-admin-sidebar-collapsed";
 
-export function AdminShell({ children }: { children: React.ReactNode }) {
+interface AdminShellProps {
+  children: React.ReactNode;
+  /** Server-verified broker email, or `null` when the claim has no email. */
+  brokerEmail: string | null;
+}
+
+export function AdminShell({ children, brokerEmail }: AdminShellProps) {
   const [collapsed, setCollapsed] = useState(false);
 
   useEffect(() => {
@@ -67,15 +73,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
           collapsed ? "lg:pl-20" : "lg:pl-80",
         )}
       >
-        <AdminHeader />
-
-        <div
-          role="note"
-          className="border-b border-warning/25 bg-warning/10 px-4 py-2.5 text-center text-xs font-medium text-warning sm:px-6 lg:px-8"
-        >
-          Development preview — authentication and database persistence are not
-          enabled.
-        </div>
+        <AdminHeader brokerEmail={brokerEmail} />
 
         <main
           id="admin-main-content"
@@ -85,8 +83,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
         </main>
 
         <footer className="border-t border-border px-4 py-5 text-xs text-muted-foreground sm:px-6 lg:px-8">
-          {siteConfig.name} · Admin development preview · No authentication or
-          data persistence
+          {siteConfig.name} · Broker admin
         </footer>
       </div>
     </div>

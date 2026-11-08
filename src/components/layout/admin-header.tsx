@@ -5,7 +5,6 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 import { AdminMobileNav } from "@/components/layout/admin-mobile-nav";
-import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -42,14 +41,19 @@ function getHeaderContext(pathname: string): HeaderContext {
   return { section: "Workspace", title: "Broker admin" };
 }
 
-export function AdminHeader() {
+interface AdminHeaderProps {
+  brokerEmail: string | null;
+}
+
+export function AdminHeader({ brokerEmail }: AdminHeaderProps) {
   const pathname = usePathname();
   const context = getHeaderContext(pathname);
+  const email = brokerEmail ?? "Email unavailable";
 
   return (
     <header className="sticky top-0 z-20 flex h-16 items-center justify-between gap-4 border-b border-border bg-background/95 px-4 backdrop-blur supports-[backdrop-filter]:bg-background/80 sm:px-6 lg:px-8">
       <div className="flex min-w-0 items-center gap-3">
-        <AdminMobileNav />
+        <AdminMobileNav brokerEmail={brokerEmail} />
         <div className="min-w-0">
           <nav aria-label="Admin breadcrumb">
             <ol className="flex items-center gap-1 text-[11px] text-muted-foreground">
@@ -75,14 +79,6 @@ export function AdminHeader() {
       </div>
 
       <div className="flex items-center gap-2 sm:gap-3">
-        <Badge variant="outline" className="hidden md:inline-flex">
-          <span
-            aria-hidden="true"
-            className="size-1.5 rounded-full bg-warning"
-          />
-          Demo session
-        </Badge>
-
         <button
           type="button"
           title="Notifications are a development preview"
@@ -118,9 +114,14 @@ export function AdminHeader() {
           >
             B
           </span>
-          <div className="hidden leading-tight lg:block">
+          <div className="hidden min-w-0 leading-tight lg:block">
             <p className="text-xs font-semibold text-foreground">Broker</p>
-            <p className="text-[11px] text-muted-foreground">Demo profile</p>
+            <p
+              className="max-w-48 truncate text-[11px] text-muted-foreground"
+              title={brokerEmail ?? undefined}
+            >
+              {email}
+            </p>
           </div>
         </div>
       </div>

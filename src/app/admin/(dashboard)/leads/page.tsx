@@ -5,6 +5,7 @@ import Link from "next/link";
 import { AdminPageHeader } from "@/components/admin/admin-page-header";
 import { Notice } from "@/components/common/notice";
 import { Button } from "@/components/ui/button";
+import { requireBroker } from "@/lib/auth/broker";
 import { leadStatusOptions } from "@/modules/leads/constants";
 import { getLeads } from "@/modules/leads/queries";
 import { getAllProperties } from "@/modules/properties/queries";
@@ -15,6 +16,9 @@ import { AdminLeadsClient } from "./admin-leads-client";
 export const metadata: Metadata = {
   title: "Leads and enquiries",
 };
+
+// Session-guarded admin pages are allowed to block during navigation.
+export const instant = false;
 
 interface AdminLeadsPageProps {
   searchParams: Promise<{ lead?: string | string[]; status?: string | string[] }>;
@@ -31,6 +35,8 @@ function firstValue(value: string | string[] | undefined): string | undefined {
 export default async function AdminLeadsPage({
   searchParams,
 }: AdminLeadsPageProps) {
+  await requireBroker();
+
   const params = await searchParams;
   const requestedLeadId = firstValue(params.lead);
   const requestedStatus = firstValue(params.status);

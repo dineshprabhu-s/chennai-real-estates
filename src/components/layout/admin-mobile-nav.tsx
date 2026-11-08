@@ -1,6 +1,6 @@
 "use client";
 
-import { ExternalLink, Menu, ShieldAlert, X } from "lucide-react";
+import { ExternalLink, Menu, X } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -12,7 +12,11 @@ import { buttonVariants } from "@/components/ui/button";
 import { useScrollLock } from "@/hooks/use-scroll-lock";
 import { cn } from "@/lib/utils";
 
-export function AdminMobileNav() {
+interface AdminMobileNavProps {
+  brokerEmail: string | null;
+}
+
+export function AdminMobileNav({ brokerEmail }: AdminMobileNavProps) {
   const [open, setOpen] = useState(false);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
 
@@ -106,23 +110,20 @@ export function AdminMobileNav() {
                     className="mt-3 space-y-1"
                     onNavigate={() => setOpen(false)}
                   />
-
-                  <div className="mt-6 rounded-lg border border-dashed border-border bg-muted/50 p-4">
-                    <p className="flex items-center gap-2 text-xs font-semibold text-foreground">
-                      <ShieldAlert
-                        aria-hidden="true"
-                        className="size-3.5 text-warning"
-                      />
-                      Development preview
-                    </p>
-                    <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
-                      Authentication, database writes, and image uploads are not
-                      enabled.
-                    </p>
-                  </div>
                 </div>
 
                 <div className="space-y-1 border-t border-border p-4">
+                  <div className="mb-2 border-b border-border px-3 pb-3">
+                    <p className="text-[10px] font-semibold tracking-[0.16em] text-muted-foreground uppercase">
+                      Signed in as
+                    </p>
+                    <p
+                      className="mt-1 truncate text-xs font-medium text-foreground"
+                      title={brokerEmail ?? undefined}
+                    >
+                      {brokerEmail ?? "Email unavailable"}
+                    </p>
+                  </div>
                   <Link
                     href="/"
                     onClick={() => setOpen(false)}

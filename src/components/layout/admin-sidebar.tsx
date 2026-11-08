@@ -1,11 +1,6 @@
 "use client";
 
-import {
-  ExternalLink,
-  PanelLeftClose,
-  PanelLeftOpen,
-  ShieldAlert,
-} from "lucide-react";
+import { ExternalLink, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import Link from "next/link";
 
 import { AdminLogoutButton } from "@/components/admin/admin-logout-button";
@@ -79,36 +74,6 @@ export function AdminSidebar({
           Workspace
         </p>
         <AdminNavLinks className="mt-3 space-y-1" collapsed={collapsed} />
-
-        <div
-          className={cn(
-            "mt-8 rounded-lg border border-dashed border-border bg-muted/40 p-4",
-            collapsed && "flex justify-center p-3",
-          )}
-          title={
-            collapsed
-              ? "Development preview — no authentication or data persistence"
-              : undefined
-          }
-        >
-          <p
-            className={cn(
-              "flex items-center gap-2 text-xs font-semibold text-foreground",
-              collapsed && "sr-only",
-            )}
-          >
-            <ShieldAlert aria-hidden="true" className="size-3.5 text-warning" />
-            Development preview
-          </p>
-          {collapsed ? (
-            <ShieldAlert aria-hidden="true" className="size-4 text-warning" />
-          ) : (
-            <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
-              Authentication, database writes, and image uploads are not
-              enabled. Changes stay in this browser session only.
-            </p>
-          )}
-        </div>
       </div>
 
       <div

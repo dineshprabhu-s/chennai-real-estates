@@ -1,9 +1,11 @@
 import { ArrowLeft, Check, ShieldCheck } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 
 import { Logo } from "@/components/common/logo";
 import { LoginForm } from "@/components/forms/login-form";
+import { getBrokerIdentity } from "@/lib/auth/broker";
 import { sanitizeNextPath } from "@/lib/auth/next-path";
 
 export const metadata: Metadata = {
@@ -45,6 +47,15 @@ export default async function AdminLoginPage({
   const params = await searchParams;
   const next = sanitizeNextPath(firstValue(params.next));
   const notBroker = firstValue(params.error) === "not-broker";
+
+  // A broker who is already signed in has no reason to see the form. The
+  // destination has already passed `sanitizeNextPath`, so only local admin
+  // paths can be used.
+  const broker = await getBrokerIdentity();
+
+  if (broker) {
+    redirect(next ?? "/admin/dashboard");
+  }
 
   return (
     <div className="grid min-h-dvh bg-background lg:grid-cols-[1.02fr_0.98fr]">

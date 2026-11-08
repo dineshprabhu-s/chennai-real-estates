@@ -30,6 +30,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { requireBroker } from "@/lib/auth/broker";
 import { formatDate, formatPrice } from "@/lib/format";
 import { leadSourceLabels } from "@/modules/leads/constants";
 import { getLeadStats, getRecentLeads } from "@/modules/leads/queries";
@@ -43,6 +44,9 @@ import {
 export const metadata: Metadata = {
   title: "Dashboard",
 };
+
+// Session-guarded admin pages are allowed to block during navigation.
+export const instant = false;
 
 const quickActions = [
   {
@@ -71,7 +75,9 @@ const quickActions = [
   },
 ];
 
-export default function AdminDashboardPage() {
+export default async function AdminDashboardPage() {
+  await requireBroker();
+
   const propertyStats = getPropertyStats();
   const leadStats = getLeadStats();
   const recentProperties = getRecentProperties(5);

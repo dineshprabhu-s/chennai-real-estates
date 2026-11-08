@@ -4,13 +4,19 @@ import { AdminPageHeader } from "@/components/admin/admin-page-header";
 import { Notice } from "@/components/common/notice";
 import { PropertyForm } from "@/components/forms/property-form";
 import { Card } from "@/components/ui/card";
+import { requireBroker } from "@/lib/auth/broker";
 import { getAreasWithCounts } from "@/modules/areas/queries";
 
 export const metadata: Metadata = {
   title: "Add property",
 };
 
-export default function NewPropertyPage() {
+// Session-guarded admin pages are allowed to block during navigation.
+export const instant = false;
+
+export default async function NewPropertyPage() {
+  await requireBroker();
+
   const areas = getAreasWithCounts().map((area) => ({
     slug: area.slug,
     name: area.name,
