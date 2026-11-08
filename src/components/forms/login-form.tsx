@@ -1,26 +1,28 @@
 "use client";
 
 import { LockKeyhole } from "lucide-react";
-import { useState, type FormEvent } from "react";
+import { useActionState, useState } from "react";
 
+import { loginAction } from "@/app/admin/login/actions";
 import { FormField } from "@/components/forms/form-field";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
-/**
- * Placeholder sign-in form. Authentication is deliberately not implemented in
- * the foundation build; no credentials are stored or transmitted.
- */
-export function LoginForm() {
-  const [showNotice, setShowNotice] = useState(false);
+interface LoginFormProps {
+  /** Validated local path to return to after a successful sign-in. */
+  next?: string;
+}
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setShowNotice(true);
-  }
+export function LoginForm({ next }: LoginFormProps) {
+  const [state, formAction, isPending] = useActionState(loginAction, {
+    error: null,
+  });
+  const [email, setEmail] = useState("");
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-5">
+    <form action={formAction} className="space-y-5">
+      {next ? <input type="hidden" name="next" value={next} /> : null}
+
       <FormField label="Email address" htmlFor="login-email" required>
         <Input
           id="login-email"
@@ -28,6 +30,8 @@ export function LoginForm() {
           type="email"
           autoComplete="username"
           placeholder="broker@example.com"
+          value={email}
+          onChange={(event) => setEmail(event.target.value)}
           required
         />
       </FormField>
@@ -43,18 +47,22 @@ export function LoginForm() {
         />
       </FormField>
 
-      <Button type="submit" className="w-full">
+      <Button
+        type="submit"
+        className="w-full"
+        disabled={isPending}
+        aria-busy={isPending}
+      >
         <LockKeyhole aria-hidden="true" />
-        Sign in
+        {isPending ? "Signing in…" : "Sign in"}
       </Button>
 
-      {showNotice ? (
+      {state.error ? (
         <p
           role="alert"
-          className="rounded-lg border border-warning/30 bg-warning/5 px-4 py-3 text-sm leading-relaxed text-muted-foreground"
+          className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm leading-relaxed text-destructive"
         >
-          Authentication is not enabled in this foundation build. Sign-in will
-          be connected in a later stage.
+          {state.error}
         </p>
       ) : null}
     </form>

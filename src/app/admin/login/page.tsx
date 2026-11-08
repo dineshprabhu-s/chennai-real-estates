@@ -3,8 +3,8 @@ import type { Metadata } from "next";
 import Link from "next/link";
 
 import { Logo } from "@/components/common/logo";
-import { Notice } from "@/components/common/notice";
 import { LoginForm } from "@/components/forms/login-form";
+import { sanitizeNextPath } from "@/lib/auth/next-path";
 
 export const metadata: Metadata = {
   title: "Broker login",
@@ -14,13 +14,38 @@ export const metadata: Metadata = {
   },
 };
 
+/**
+ * The login page reads `searchParams` for the post-login destination and the
+ * broker authorization error. It therefore renders at request time; opting out
+ * of static-shell validation keeps that explicit without affecting other
+ * routes.
+ */
+export const instant = false;
+
 const highlights = [
   "A single workspace for listings and enquiries.",
   "Local area notes kept alongside each property.",
   "Built for one broker, not a crowded marketplace.",
 ];
 
-export default function AdminLoginPage() {
+interface AdminLoginPageProps {
+  searchParams: Promise<{
+    next?: string | string[];
+    error?: string | string[];
+  }>;
+}
+
+function firstValue(value: string | string[] | undefined): string | undefined {
+  return Array.isArray(value) ? value[0] : value;
+}
+
+export default async function AdminLoginPage({
+  searchParams,
+}: AdminLoginPageProps) {
+  const params = await searchParams;
+  const next = sanitizeNextPath(firstValue(params.next));
+  const notBroker = firstValue(params.error) === "not-broker";
+
   return (
     <div className="grid min-h-dvh bg-background lg:grid-cols-[1.02fr_0.98fr]">
       <aside className="relative hidden overflow-hidden bg-primary p-12 text-primary-foreground lg:flex lg:flex-col lg:justify-between">
@@ -45,9 +70,9 @@ export default function AdminLoginPage() {
             Your listings, enquiries, and local knowledge in one calm place.
           </p>
           <p className="mt-5 text-sm leading-relaxed text-primary-foreground/70">
-            Chennai Real Estates is being built as a focused, single-broker
-            platform for Madipakkam. Sign-in will open the admin tools once
-            authentication is connected.
+            Chennai Real Estates is a focused, single-broker platform for
+            Madipakkam. Sign in to manage listings, enquiries, and local area
+            notes.
           </p>
           <ul className="mt-8 space-y-3">
             {highlights.map((item) => (
@@ -94,18 +119,19 @@ export default function AdminLoginPage() {
               Access property management, enquiries, and area tools.
             </p>
 
-            <Notice className="mt-6">
-              Authentication is not enabled in this foundation build. The form
-              below demonstrates the intended sign-in experience only.
-            </Notice>
+            {notBroker ? (
+              <p
+                role="alert"
+                className="mt-6 rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm leading-relaxed text-destructive"
+              >
+                This account does not have broker access. Sign in with a broker
+                account to continue.
+              </p>
+            ) : null}
 
             <div className="mt-6">
-              <LoginForm />
+              <LoginForm next={next ?? undefined} />
             </div>
-
-            <p className="mt-6 text-center text-xs leading-relaxed text-muted-foreground">
-              No credentials are stored or checked in this build.
-            </p>
           </div>
         </div>
 
