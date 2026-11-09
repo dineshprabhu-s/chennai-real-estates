@@ -541,12 +541,13 @@ export default async function PropertyDetailPage({
                 Ask about this property
               </h2>
               <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                The form validates in your browser and shows a demo message only.
-                It does not send or store an enquiry.
+                Send an enquiry about this listing. The broker will use your
+                details only to respond.
               </p>
               <ContactForm
                 key={property.id}
                 property={property}
+                propertyId={property.id}
                 compact
                 className="mt-4"
               />

@@ -13,11 +13,13 @@ import {
   XCircle,
 } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 
+import { addBrokerLeadNote, updateBrokerLeadStatus } from "./actions";
 import { LeadStatusBadge } from "@/components/admin/badges";
 import { AdminDataTable, type AdminTableColumn } from "@/components/admin/data-table";
-import { DemoFeedback } from "@/components/admin/demo-feedback";
+import { ActionFeedback } from "@/components/admin/action-feedback";
 import { AdminModal } from "@/components/admin/modal";
 import { StatCard } from "@/components/admin/stat-card";
 import { EmptyState } from "@/components/common/empty-state";
@@ -28,22 +30,26 @@ import { Input } from "@/components/ui/input";
 import { NativeSelect } from "@/components/ui/native-select";
 import { Textarea } from "@/components/ui/textarea";
 import { formatDate } from "@/lib/format";
+import type { BrokerLead } from "@/lib/supabase/broker.types";
 import {
   leadSourceLabels,
   leadStatusLabels,
   leadStatusOptions,
 } from "@/modules/leads/constants";
-import type { Lead, LeadStatus } from "@/types/lead";
+import type { LeadStatus } from "@/types/lead";
+import type { PropertyStatus } from "@/types/property";
 
 interface LeadPropertyOption {
   id: string;
   title: string;
   locality: string;
+  status: PropertyStatus;
 }
 
 interface AdminLeadsClientProps {
-  initialLeads: Lead[];
+  initialLeads: BrokerLead[];
   properties: LeadPropertyOption[];
+  totalLeads: number;
   initialLeadId?: string;
   initialStatus?: LeadStatus;
 }
@@ -63,10 +69,14 @@ const statusIcons = {
 export function AdminLeadsClient({
   initialLeads,
   properties,
+  totalLeads,
   initialLeadId,
   initialStatus,
 }: AdminLeadsClientProps) {
-  const [leads, setLeads] = useState(initialLeads);
+  // Server props are authoritative: React preserves this component's state
+  // when a revalidated route receives a fresh Server Component payload.
+  const leads = initialLeads;
+  const router = useRouter();
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState<LeadStatus | "all">(
     initialStatus ?? "all",
@@ -78,6 +88,7 @@ export function AdminLeadsClient({
   );
   const [noteDraft, setNoteDraft] = useState("");
   const [feedback, setFeedback] = useState<string | null>(null);
+  const [pending, setPending] = useState<"status" | "note" | null>(null);
 
   const selectedLead =
     leads.find((lead) => lead.id === selectedId) ?? null;
@@ -147,74 +158,79 @@ export function AdminLeadsClient({
     setPropertyId("all");
   }
 
-  function propertyFor(lead: Lead) {
+  function propertyFor(lead: BrokerLead) {
     return properties.find((property) => property.id === lead.propertyId);
   }
 
-  function updateLead(
-    leadId: string,
-    updater: (lead: Lead) => Lead,
-    message: string,
-  ) {
-    setLeads((current) =>
-      current.map((lead) => (lead.id === leadId ? updater(lead) : lead)),
-    );
-    setFeedback(message);
-  }
-
-  function handleStatusChange(nextStatus: LeadStatus) {
-    if (!selectedLead) {
+  async function handleStatusChange(nextStatus: LeadStatus) {
+    if (!selectedLead || pending !== null || selectedLead.isDemo) {
       return;
     }
 
-    const now = new Date().toISOString();
-    updateLead(
-      selectedLead.id,
-      (lead) => ({
-        ...lead,
-        status: nextStatus,
-        activities: [
-          ...(lead.activities ?? []),
-          {
-            id: `ACT-${lead.id}-${Date.now()}`,
-            at: now,
-            label: `Status changed to ${leadStatusLabels[nextStatus]}`,
-            detail: "Demo-only change from the admin preview.",
-          },
-        ],
-      }),
-      `${selectedLead.id} moved to "${leadStatusLabels[nextStatus]}" in this browser preview only. No lead data was saved.`,
-    );
+    if (nextStatus === selectedLead.status) {
+      setFeedback(`${selectedLead.id} is already "${leadStatusLabels[nextStatus]}".`);
+      return;
+    }
+
+    setPending("status");
+    setFeedback(null);
+
+    try {
+      const result = await updateBrokerLeadStatus(selectedLead.id, nextStatus);
+
+      if (!result.ok) {
+        setFeedback(result.message);
+        return;
+      }
+
+      router.refresh();
+      setFeedback(
+        result.changed
+          ? `${selectedLead.id} moved to "${leadStatusLabels[nextStatus]}".${result.warning ? ` ${result.warning}` : ""}`
+          : `${selectedLead.id} is already "${leadStatusLabels[nextStatus]}".`,
+      );
+    } catch {
+      setFeedback("Unable to update the lead status. Please try again.");
+    } finally {
+      setPending(null);
+    }
   }
 
-  function addNote() {
-    if (!selectedLead || noteDraft.trim().length === 0) {
+  async function addNote() {
+    if (!selectedLead || pending !== null || selectedLead.isDemo) {
       return;
     }
 
     const note = noteDraft.trim();
-    const now = new Date().toISOString();
-    updateLead(
-      selectedLead.id,
-      (lead) => ({
-        ...lead,
-        notes: [...(lead.notes ?? []), note],
-        activities: [
-          ...(lead.activities ?? []),
-          {
-            id: `ACT-${lead.id}-${Date.now()}`,
-            at: now,
-            label: "Internal note added",
-            detail: note,
-          },
-        ],
-      }),
-      "Internal note added to this browser preview only. It was not stored and is never shown on public pages.",
-    );
-    setNoteDraft("");
+    if (note.length === 0) {
+      setFeedback("Enter a note before saving.");
+      return;
+    }
+
+    setPending("note");
+    setFeedback(null);
+
+    try {
+      const result = await addBrokerLeadNote(selectedLead.id, note);
+
+      if (!result.ok) {
+        setFeedback(result.message);
+        return;
+      }
+
+      setNoteDraft("");
+      router.refresh();
+      setFeedback(
+        `Internal note saved.${result.warning ? ` ${result.warning}` : ""}`,
+      );
+    } catch {
+      setFeedback("Unable to save the note. Please try again.");
+    } finally {
+      setPending(null);
+    }
   }
 
-  const columns: Array<AdminTableColumn<Lead>> = [
+  const columns: Array<AdminTableColumn<BrokerLead>> = [
     {
       id: "id",
       header: "Lead ID",
@@ -325,10 +341,10 @@ export function AdminLeadsClient({
                 : option.value === "new"
                   ? "Enquiries awaiting a first response."
                   : option.value === "converted"
-                    ? "Demo enquiries marked converted."
+                    ? "Enquiries marked converted."
                     : option.value === "closed-lost"
-                      ? "Demo enquiries marked closed or lost."
-                      : `Demo enquiries in the ${leadStatusLabels[option.value].toLowerCase()} stage.`
+                      ? "Enquiries marked closed or lost."
+                      : `Enquiries in the ${leadStatusLabels[option.value].toLowerCase()} stage.`
             }
             icon={statusIcons[option.value]}
           />
@@ -343,11 +359,13 @@ export function AdminLeadsClient({
               {filtered.length}
             </span>{" "}
             of{" "}
-            <span className="font-semibold text-foreground">{leads.length}</span>{" "}
-            {leads.length === 1 ? "enquiry" : "enquiries"}
+            <span className="font-semibold text-foreground">
+              {totalLeads}
+            </span>{" "}
+            {totalLeads === 1 ? "enquiry" : "enquiries"}
           </p>
           <p className="text-xs text-muted-foreground">
-            All seeded enquiries are demo data
+            Demo records are labelled individually
           </p>
         </div>
 
@@ -444,7 +462,7 @@ export function AdminLeadsClient({
         </div>
       </div>
 
-      <DemoFeedback message={feedback} className="mt-4" />
+      <ActionFeedback message={feedback} className="mt-4" />
 
       {filtered.length === 0 ? (
         <EmptyState
@@ -641,8 +659,9 @@ export function AdminLeadsClient({
                 Lead status
               </h3>
               <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                Changes are demo-only and are not saved. Scheduling a visit does
-                not change any property&apos;s availability status.
+                {selectedLead.isDemo
+                  ? "Seeded demo enquiries are read-only. Status changes are disabled for this record."
+                  : "Status changes are saved to the broker workspace. Scheduling a visit does not change any property's availability status."}
               </p>
               <label htmlFor="lead-detail-status" className="sr-only">
                 Change lead status
@@ -650,10 +669,12 @@ export function AdminLeadsClient({
               <NativeSelect
                 id="lead-detail-status"
                 value={selectedLead.status}
+                disabled={selectedLead.isDemo || pending !== null}
                 onChange={(event) =>
                   handleStatusChange(event.target.value as LeadStatus)
                 }
                 className="mt-3"
+                aria-busy={pending === "status"}
               >
                 {leadStatusOptions.map((option) => (
                   <option key={option.value} value={option.value}>
@@ -661,6 +682,11 @@ export function AdminLeadsClient({
                   </option>
                 ))}
               </NativeSelect>
+              {pending === "status" ? (
+                <p className="mt-2 text-xs text-muted-foreground" role="status">
+                  Saving…
+                </p>
+              ) : null}
             </section>
 
             <section>
@@ -669,18 +695,22 @@ export function AdminLeadsClient({
                 Internal notes
               </h3>
               <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                Notes stay in the admin workspace and are never shown on public
-                pages. They are not persisted in this preview.
+                {selectedLead.isDemo
+                  ? "Seeded demo enquiries are read-only. Notes cannot be added to this record."
+                  : "Notes are saved to the broker workspace and are never shown on public pages."}
               </p>
 
               {(selectedLead.notes ?? []).length > 0 ? (
                 <ul className="mt-3 space-y-2">
-                  {(selectedLead.notes ?? []).map((note, index) => (
+                  {(selectedLead.notes ?? []).map((note) => (
                     <li
-                      key={`${selectedLead.id}-note-${index}`}
+                      key={note.id}
                       className="rounded-lg border border-border bg-muted/30 px-3 py-2 text-sm leading-relaxed text-foreground"
                     >
-                      {note}
+                      <p>{note.body}</p>
+                      <p className="mt-1 text-[11px] text-muted-foreground">
+                        {formatDate(note.createdAt)}
+                      </p>
                     </li>
                   ))}
                 </ul>
@@ -699,16 +729,21 @@ export function AdminLeadsClient({
                 onChange={(event) => setNoteDraft(event.target.value)}
                 placeholder="Add context for your next follow-up…"
                 className="mt-3 min-h-20"
+                disabled={selectedLead.isDemo || pending !== null}
               />
               <Button
                 type="button"
                 variant="outline"
                 size="sm"
                 onClick={addNote}
-                disabled={noteDraft.trim().length === 0}
+                disabled={
+                  selectedLead.isDemo ||
+                  pending !== null ||
+                  noteDraft.trim().length === 0
+                }
                 className="mt-2"
               >
-                Add note (demo)
+                {pending === "note" ? "Saving…" : "Add note"}
               </Button>
             </section>
 
@@ -742,11 +777,12 @@ export function AdminLeadsClient({
               </ol>
             </section>
 
-            <DemoFeedback message={feedback} />
+            <ActionFeedback message={feedback} />
 
             <p className="rounded-lg border border-dashed border-border bg-muted/40 px-3 py-2 text-xs leading-relaxed text-muted-foreground">
-              This is seeded demo data. No customer enquiry was received, and no
-              status change or note is persisted.
+              {selectedLead.isDemo
+                ? "This is a seeded demo enquiry. Demo records are read-only and cannot be changed."
+                : "Status changes and internal notes are saved to the broker workspace and never shown on public pages."}
             </p>
           </div>
         ) : null}

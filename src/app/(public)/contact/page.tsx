@@ -108,9 +108,9 @@ export default async function ContactPage({ searchParams }: ContactPageProps) {
       />
 
       <Notice className="mt-8">
-        Contact details and form submission are placeholders for the foundation
-        build. WhatsApp only appears when a business number is configured. Update
-        the broker details in the site configuration before launch.
+        Enquiries submitted here go directly to the broker. Contact details and
+        WhatsApp remain placeholders for the foundation build; update the broker
+        details in the site configuration before launch.
       </Notice>
 
       <div className="mt-10 grid grid-cols-1 gap-10 lg:grid-cols-[0.9fr_1.1fr] lg:items-start">
@@ -202,6 +202,7 @@ export default async function ContactPage({ searchParams }: ContactPageProps) {
           <ContactForm
             key={property?.id ?? "general-enquiry"}
             property={property}
+            propertyId={params.property === undefined ? null : propertyId}
           />
         </Card>
       </div>

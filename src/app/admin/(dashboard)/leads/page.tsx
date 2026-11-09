@@ -6,9 +6,12 @@ import { AdminPageHeader } from "@/components/admin/admin-page-header";
 import { Notice } from "@/components/common/notice";
 import { Button } from "@/components/ui/button";
 import { requireBroker } from "@/lib/auth/broker";
+import {
+  getBrokerLeadById,
+  getBrokerLeads,
+  getBrokerPropertyOptions,
+} from "@/lib/supabase/queries/broker-leads";
 import { leadStatusOptions } from "@/modules/leads/constants";
-import { getLeads } from "@/modules/leads/queries";
-import { getAllProperties } from "@/modules/properties/queries";
 import type { LeadStatus } from "@/types/lead";
 
 import { AdminLeadsClient } from "./admin-leads-client";
@@ -29,8 +32,9 @@ function firstValue(value: string | string[] | undefined): string | undefined {
 }
 
 /**
- * Server wrapper for the demo lead inbox. Every record returned here is
- * seeded sample data; no customer enquiry data is fetched from anywhere.
+ * Server wrapper for the broker lead inbox. Records come from Supabase through
+ * a broker-guarded, request-scoped read layer; seeded rows stay labelled via
+ * `isDemo`.
  */
 export default async function AdminLeadsPage({
   searchParams,
@@ -40,17 +44,31 @@ export default async function AdminLeadsPage({
   const params = await searchParams;
   const requestedLeadId = firstValue(params.lead);
   const requestedStatus = firstValue(params.status);
-  const leads = getLeads();
+  const [inbox, propertyOptions] = await Promise.all([
+    getBrokerLeads(),
+    getBrokerPropertyOptions(),
+  ]);
+
+  let leads = inbox.leads;
+
+  // `?lead=` may point at a record outside the explicit inbox window. Fetch it
+  // directly so the existing deep link still opens the detail drawer.
+  if (requestedLeadId && !leads.some((lead) => lead.id === requestedLeadId)) {
+    const requestedLead = await getBrokerLeadById(requestedLeadId);
+    if (requestedLead) leads = [requestedLead, ...leads];
+  }
+
   const initialLeadId = leads.some((lead) => lead.id === requestedLeadId)
     ? requestedLeadId
     : undefined;
   const initialStatus = leadStatusOptions.find(
     (option) => option.value === requestedStatus,
   )?.value as LeadStatus | undefined;
-  const properties = getAllProperties().map((property) => ({
+  const properties = propertyOptions.map((property) => ({
     id: property.id,
     title: property.title,
     locality: property.locality,
+    status: property.status,
   }));
 
   return (
@@ -59,7 +77,7 @@ export default async function AdminLeadsPage({
         breadcrumbs={[{ label: "Leads / Enquiries" }]}
         eyebrow="Leads"
         title="Customer enquiries"
-        description="A single inbox for website, WhatsApp, and phone enquiries. Seeded demo records are labelled so they are never mistaken for real customers."
+        description="A single inbox for website, WhatsApp, and phone enquiries. Seeded demo records are labelled individually so they are never mistaken for real customers."
         actions={
           <Button asChild variant="outline">
             <Link href="/">
@@ -71,14 +89,22 @@ export default async function AdminLeadsPage({
       />
 
       <Notice className="mt-6">
-        Development preview — every enquiry below is clearly labelled sample
-        data. Status changes and internal notes stay in this browser session and
-        are never stored or shown on public pages.
+        Broker inbox — enquiry records are read from Supabase. Seeded demo rows
+        remain visible, labelled, and read-only. Status changes and internal
+        notes on other records are saved to the broker workspace.
       </Notice>
+
+      {inbox.hasMore ? (
+        <Notice className="mt-4">
+          Showing the most recent {inbox.limit} of {inbox.total} enquiries. Older
+          records are not loaded in this view.
+        </Notice>
+      ) : null}
 
       <AdminLeadsClient
         initialLeads={leads}
         properties={properties}
+        totalLeads={Math.max(inbox.total, leads.length)}
         initialLeadId={initialLeadId}
         initialStatus={initialStatus}
       />

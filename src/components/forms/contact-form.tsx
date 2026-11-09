@@ -1,24 +1,42 @@
 "use client";
 
 import { MessageCircle, Phone, Send } from "lucide-react";
-import { useState, type FormEvent } from "react";
+import { useRef, useState, useSyncExternalStore, type FormEvent } from "react";
 
+import { submitPublicLead } from "@/app/(public)/contact/actions";
 import { FormField } from "@/components/forms/form-field";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { siteConfig } from "@/config/site";
+import {
+  publicLeadMessages,
+  validatePublicLeadInput,
+  type PublicLeadField,
+  type PublicLeadFieldErrors,
+} from "@/lib/validation/public-lead";
 import { getGeneralWhatsAppUrl } from "@/lib/whatsapp";
 import { cn } from "@/lib/utils";
 import type { Property } from "@/types/property";
 
-type FieldName = "name" | "phone" | "email" | "message";
-type FieldErrors = Partial<Record<FieldName, string>>;
+type FieldName = PublicLeadField;
+type FieldErrors = PublicLeadFieldErrors;
 
 type EnquiryProperty = Pick<Property, "id" | "title" | "locality">;
 
+const subscribe = () => () => {};
+const clientHydrated = () => true;
+const serverHydrated = () => false;
+
+interface Feedback {
+  tone: "success" | "error";
+  message: string;
+}
+
 interface ContactFormProps {
   property?: EnquiryProperty;
+  /** Explicit database property ID. `null` means a general enquiry. */
+  propertyId?: string | null;
   compact?: boolean;
   className?: string;
 }
@@ -31,14 +49,32 @@ function initialMessage(property?: EnquiryProperty): string {
   return `I am interested in property ${property.id} (${property.title}) in ${property.locality}. Please share more details and help arrange a property visit.`;
 }
 
+function focusFirstInvalid(form: HTMLFormElement, errors: FieldErrors) {
+  const firstInvalid = (["name", "phone", "email", "message"] as const).find(
+    (field) => errors[field],
+  );
+
+  if (!firstInvalid) {
+    return;
+  }
+
+  form.querySelector<HTMLElement>(`[name="${firstInvalid}"]`)?.focus();
+}
+
 export function ContactForm({
   property,
+  propertyId,
   compact = false,
   className,
 }: ContactFormProps) {
   const [errors, setErrors] = useState<FieldErrors>({});
-  const [submitted, setSubmitted] = useState(false);
+  const [feedback, setFeedback] = useState<Feedback | null>(null);
+  const [pending, setPending] = useState(false);
+  const hydrated = useSyncExternalStore(subscribe, clientHydrated, serverHydrated);
+  const submittingRef = useRef(false);
   const whatsappUrl = getGeneralWhatsAppUrl();
+  const enquiryPropertyId =
+    propertyId === undefined ? (property?.id ?? null) : propertyId;
 
   function clearError(field: FieldName) {
     setErrors((current) => {
@@ -53,59 +89,82 @@ export function ContactForm({
     });
   }
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    const form = event.currentTarget;
-    const data = new FormData(form);
-    const name = String(data.get("name") ?? "").trim();
-    const phone = String(data.get("phone") ?? "").trim();
-    const email = String(data.get("email") ?? "").trim();
-    const message = String(data.get("message") ?? "").trim();
-    const phoneDigits = phone.replace(/\D/g, "");
-    const nextErrors: FieldErrors = {};
-
-    if (name.length < 2) {
-      nextErrors.name = "Please enter your name.";
-    }
-
-    if (phoneDigits.length < 10 || phoneDigits.length > 13) {
-      nextErrors.phone = "Enter a valid phone number with 10 to 13 digits.";
-    }
-
-    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      nextErrors.email = "Enter a valid email address, or leave this blank.";
-    }
-
-    if (message.length < 10) {
-      nextErrors.message = "Add a little more detail (at least 10 characters).";
-    }
-
-    setErrors(nextErrors);
-
-    const firstInvalid = (["name", "phone", "email", "message"] as const).find(
-      (field) => nextErrors[field],
-    );
-
-    if (firstInvalid) {
-      setSubmitted(false);
-      const input = form.querySelector<HTMLElement>(
-        `[name="${firstInvalid}"]`,
-      );
-      input?.focus();
+    if (!hydrated || pending || submittingRef.current) {
       return;
     }
 
-    setSubmitted(true);
+    const form = event.currentTarget;
+    const data = new FormData(form);
+    const validation = validatePublicLeadInput({
+      name: data.get("name"),
+      phone: data.get("phone"),
+      email: data.get("email"),
+      message: data.get("message"),
+      propertyId: enquiryPropertyId,
+    });
+
+    setFeedback(null);
+
+    if (!validation.ok) {
+      setErrors(validation.fields);
+      setFeedback({ tone: "error", message: validation.message });
+      focusFirstInvalid(form, validation.fields);
+      return;
+    }
+
+    setErrors({});
+    submittingRef.current = true;
+    setPending(true);
+
+    try {
+      const result = await submitPublicLead({
+        ...validation.values,
+        website: String(data.get("website") ?? ""),
+      });
+
+      if (result.ok) {
+        setFeedback({ tone: "success", message: publicLeadMessages.success });
+        return;
+      }
+
+      if (result.fields) {
+        setErrors(result.fields);
+        focusFirstInvalid(form, result.fields);
+      }
+
+      setFeedback({ tone: "error", message: result.message });
+    } catch {
+      setFeedback({ tone: "error", message: publicLeadMessages.generic });
+    } finally {
+      submittingRef.current = false;
+      setPending(false);
+    }
   }
 
   return (
     <form
+      method="post"
+      action="/contact"
       noValidate
       onSubmit={handleSubmit}
-      onChange={() => setSubmitted(false)}
+      onChange={() => setFeedback(null)}
+      aria-busy={pending}
       className={cn("space-y-5", className)}
     >
+      <div className="hidden" aria-hidden="true">
+        <label htmlFor="contact-website">Website</label>
+        <input
+          id="contact-website"
+          name="website"
+          type="text"
+          tabIndex={-1}
+          autoComplete="off"
+        />
+      </div>
+
       {property ? (
         <p className="rounded-lg border border-border bg-muted/60 px-3 py-2 text-xs leading-relaxed text-muted-foreground">
           Enquiring about{" "}
@@ -199,24 +258,29 @@ export function ContactForm({
       </FormField>
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-        <Button type="submit">
+        <Button type="submit" disabled={!hydrated || pending} aria-busy={pending}>
           <Send aria-hidden="true" />
-          Send enquiry
+          {pending ? "Sending…" : "Send enquiry"}
         </Button>
         <p className="text-xs leading-relaxed text-muted-foreground">
-          Demo form only. Your details are not sent or stored yet.
+          Your details are sent only to the broker to respond to this enquiry.
         </p>
       </div>
 
-      {submitted ? (
+      {!hydrated ? (
+        <p className="text-xs text-muted-foreground" role="status">
+          The enquiry form requires JavaScript. Please enable it or call the broker.
+        </p>
+      ) : null}
+
+      {feedback?.tone === "success" ? (
         <div
           role="status"
           className="rounded-lg border border-primary/20 bg-accent/60 px-4 py-3 text-sm leading-relaxed text-foreground"
         >
-          <p className="font-semibold">Enquiry captured in the demo only</p>
+          <p className="font-semibold">Enquiry sent</p>
           <p className="mt-1 text-muted-foreground">
-            This form is not connected to a backend, so nothing has been sent or
-            stored. To reach the broker now, call{" "}
+            {feedback.message} To reach the broker now, call{" "}
             <a
               href={siteConfig.contact.phoneHref}
               className="inline-flex items-center gap-1 font-medium text-primary underline underline-offset-4"
@@ -241,6 +305,16 @@ export function ContactForm({
             ) : null}
             .
           </p>
+        </div>
+      ) : null}
+
+      {feedback?.tone === "error" ? (
+        <div
+          role="alert"
+          className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm leading-relaxed text-foreground"
+        >
+          <p className="font-semibold text-destructive">Enquiry not sent</p>
+          <p className="mt-1 text-muted-foreground">{feedback.message}</p>
         </div>
       ) : null}
     </form>

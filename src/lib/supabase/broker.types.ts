@@ -1,4 +1,5 @@
 import type { DatabaseNumeric } from "@/lib/supabase/database.types";
+import type { LeadActivity, LeadSource, LeadStatus } from "@/types/lead";
 import type {
   ApprovalStatus, BrokerageType, Facing, FurnishingStatus, ListingType,
   Property, PropertyConfiguration, PropertyStatus, PropertyType, VerificationStatus,
@@ -34,4 +35,87 @@ export interface BrokerAreaOption {
   slug: string;
   name: string;
   isActive: boolean;
+}
+
+/** Broker-only projection of a lead. Contains customer PII; server-side only. */
+export interface BrokerLeadRow {
+  id: string;
+  name: string;
+  phone: string;
+  email: string | null;
+  message: string;
+  property_id: string | null;
+  status: LeadStatus;
+  created_at: string;
+  source: LeadSource | null;
+  is_demo: boolean;
+  updated_at: string;
+}
+
+/** `lead_notes.id` is a bigint identity; PostgREST may return a number or string. */
+export interface BrokerLeadNoteRow {
+  id: number | string;
+  lead_id: string;
+  body: string;
+  created_at: string;
+}
+
+export interface BrokerLeadActivityRow {
+  id: string;
+  lead_id: string;
+  occurred_at: string;
+  label: string;
+  detail: string | null;
+}
+
+/** Notes have no author column, so the UI must not imply one. */
+export interface BrokerLeadNote {
+  id: string;
+  body: string;
+  createdAt: string;
+}
+
+/**
+ * Application model used by the broker inbox and dashboard. It extends the
+ * demo lead shape with structured database notes and broker-only timestamps.
+ */
+export interface BrokerLead {
+  id: string;
+  name: string;
+  phone: string;
+  email: string | null;
+  message: string;
+  propertyId: string | null;
+  status: LeadStatus;
+  createdAt: string;
+  source: LeadSource | null;
+  isDemo: boolean;
+  updatedAt: string;
+  notes: BrokerLeadNote[];
+  activities: LeadActivity[];
+}
+
+/** Only fields the leads inbox needs to resolve and link a property. */
+export interface BrokerPropertyOption {
+  id: string;
+  title: string;
+  locality: string;
+  status: PropertyStatus;
+}
+
+export interface BrokerLeadStats extends Record<LeadStatus, number> {
+  total: number;
+  pending: number;
+  scheduledVisits: number;
+}
+
+/**
+ * Explicit inbox window. `total` is the full number of matching rows and
+ * `hasMore` reports whether the window is incomplete.
+ */
+export interface BrokerLeadInbox {
+  leads: BrokerLead[];
+  total: number;
+  limit: number;
+  hasMore: boolean;
 }

@@ -20,6 +20,7 @@ import {
 } from "@/components/admin/badges";
 import { StatCard } from "@/components/admin/stat-card";
 import { Notice } from "@/components/common/notice";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import {
@@ -32,11 +33,14 @@ import {
 } from "@/components/ui/table";
 import { requireBroker } from "@/lib/auth/broker";
 import { formatDate, formatPrice } from "@/lib/format";
+import {
+  getBrokerLeadStats,
+  getBrokerPropertyOptions,
+  getRecentBrokerLeads,
+} from "@/lib/supabase/queries/broker-leads";
 import { leadSourceLabels } from "@/modules/leads/constants";
-import { getLeadStats, getRecentLeads } from "@/modules/leads/queries";
 import { listingTypeLabels } from "@/modules/properties/constants";
 import {
-  getPropertyById,
   getPropertyStats,
   getRecentProperties,
 } from "@/modules/properties/queries";
@@ -63,7 +67,7 @@ const quickActions = [
   },
   {
     label: "View new enquiries",
-    description: "Open demo enquiries that are awaiting a first response.",
+    description: "Open enquiries that are awaiting a first response.",
     href: "/admin/leads?status=new",
     icon: Inbox,
   },
@@ -78,10 +82,23 @@ const quickActions = [
 export default async function AdminDashboardPage() {
   await requireBroker();
 
-  const propertyStats = getPropertyStats();
-  const leadStats = getLeadStats();
-  const recentProperties = getRecentProperties(5);
-  const recentLeads = getRecentLeads(5);
+  const [
+    propertyStats,
+    leadStats,
+    recentProperties,
+    recentLeads,
+    leadProperties,
+  ] = await Promise.all([
+    getPropertyStats(),
+    getBrokerLeadStats(),
+    getRecentProperties(5),
+    getRecentBrokerLeads(5),
+    getBrokerPropertyOptions(),
+  ]);
+
+  const leadPropertyById = new Map(
+    leadProperties.map((property) => [property.id, property]),
+  );
 
   return (
     <div>
@@ -89,7 +106,7 @@ export default async function AdminDashboardPage() {
         breadcrumbs={[{ label: "Dashboard" }]}
         eyebrow="Overview"
         title="Broker dashboard"
-        description="A live summary of the demo property catalogue and seeded enquiries. Every figure is calculated from the in-memory sample data, not hardcoded."
+        description="A live summary of the property catalogue and customer enquiries."
         actions={
           <Button asChild>
             <Link href="/admin/properties/new">
@@ -101,8 +118,9 @@ export default async function AdminDashboardPage() {
       />
 
       <Notice className="mt-6">
-        Development preview — statistics reflect the nine demo property records
-        and seeded sample enquiries. No production data is connected.
+        Development preview — property statistics and recent listings still use
+        demo records. Enquiry statistics and recent enquiries are read from
+        Supabase, with seeded demo rows labelled individually.
       </Notice>
 
       <section aria-labelledby="property-stats-heading" className="mt-8">
@@ -151,7 +169,7 @@ export default async function AdminDashboardPage() {
           <StatCard
             label="New enquiries"
             value={leadStats.new}
-            description="Seeded demo enquiries awaiting a first response."
+            description="Enquiries awaiting a first response."
             icon={Inbox}
           />
           <StatCard
@@ -246,12 +264,9 @@ export default async function AdminDashboardPage() {
             <div>
               <h2 className="flex items-center gap-2 text-base font-semibold text-foreground">
                 Recent enquiries
-                <span className="rounded-full border border-border px-2 py-0.5 text-[10px] font-semibold tracking-wide text-warning uppercase">
-                  Demo
-                </span>
               </h2>
               <p className="mt-0.5 text-xs text-muted-foreground">
-                Seeded sample leads, not real customers
+                Latest enquiries across demo and live records
               </p>
             </div>
             <Button asChild variant="ghost" size="sm">
@@ -260,18 +275,28 @@ export default async function AdminDashboardPage() {
           </div>
 
           <ul className="divide-y divide-border">
+            {recentLeads.length === 0 ? (
+              <li className="px-5 py-6 text-sm text-muted-foreground">
+                No enquiries yet.
+              </li>
+            ) : null}
             {recentLeads.map((lead) => {
               const property = lead.propertyId
-                ? getPropertyById(lead.propertyId)
+                ? leadPropertyById.get(lead.propertyId)
                 : undefined;
 
               return (
                 <li key={lead.id} className="px-5 py-4">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
-                      <p className="truncate text-sm font-semibold text-foreground">
-                        {lead.name}
-                      </p>
+                      <div className="flex items-center gap-2">
+                        <p className="truncate text-sm font-semibold text-foreground">
+                          {lead.name}
+                        </p>
+                        {lead.isDemo ? (
+                          <Badge variant="outline">Demo</Badge>
+                        ) : null}
+                      </div>
                       <p className="mt-0.5 text-xs text-muted-foreground">
                         {lead.phone}
                       </p>
@@ -334,8 +359,8 @@ export default async function AdminDashboardPage() {
 
       <p className="mt-6 flex items-center gap-2 text-xs text-muted-foreground">
         <Search aria-hidden="true" className="size-3.5" />
-        Statistics are derived from demo queries and update only if the
-        underlying sample data changes. They are not live business figures.
+        Property figures use demo queries. Enquiry figures are read from
+        Supabase and include individually labelled demo rows.
       </p>
     </div>
   );
