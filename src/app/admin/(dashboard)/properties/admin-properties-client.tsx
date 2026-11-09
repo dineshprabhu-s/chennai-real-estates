@@ -3,17 +3,14 @@
 import {
   Eye,
   Pencil,
-  Plus,
   RotateCcw,
   Search,
-  Send,
-  Undo2,
 } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 
-import { DemoFeedback } from "@/components/admin/demo-feedback";
-import { ConfirmDialog } from "@/components/admin/confirm-dialog";
+import { updateBrokerPropertyStatus } from "./actions";
 import { AdminDataTable, type AdminTableColumn } from "@/components/admin/data-table";
 import {
   AdminPropertyStatusBadge,
@@ -27,12 +24,14 @@ import { Input } from "@/components/ui/input";
 import { NativeSelect } from "@/components/ui/native-select";
 import { formatDate, formatPrice } from "@/lib/format";
 import {
-  adminPropertyStatusLabels,
   listingTypeLabels,
+  adminPropertyStatusLabels,
   propertyStatusOptions,
   propertyTypeLabels,
 } from "@/modules/properties/constants";
 import type { Property, PropertyStatus } from "@/types/property";
+
+type ListProperty = Pick<Property, "id" | "title" | "summary" | "locality" | "areaSlug" | "type" | "configuration" | "listingType" | "price" | "status" | "verificationStatus" | "updatedAt" | "builtUpAreaSqft" | "facing" | "bedrooms" | "bathrooms" | "floor" | "approvalStatus" | "brokerage">;
 
 interface AreaOption {
   slug: string;
@@ -40,12 +39,12 @@ interface AreaOption {
 }
 
 interface AdminPropertiesClientProps {
-  initialProperties: Property[];
+  initialProperties: ListProperty[];
   areas: AreaOption[];
 }
 
 type PendingAction = {
-  type: "publish" | "unpublish";
+  status: PropertyStatus;
   propertyId: string;
   propertyTitle: string;
 };
@@ -57,14 +56,18 @@ export function AdminPropertiesClient({
   initialProperties,
   areas,
 }: AdminPropertiesClientProps) {
-  const [properties, setProperties] = useState(initialProperties);
+  // Server props are authoritative: React can preserve this component's state
+  // when a revalidated route receives a fresh Server Component payload.
+  const properties = initialProperties;
+  const router = useRouter();
   const [query, setQuery] = useState("");
   const [listingType, setListingType] = useState("all");
   const [areaSlug, setAreaSlug] = useState("all");
   const [type, setType] = useState("all");
   const [status, setStatus] = useState("all");
   const [feedback, setFeedback] = useState<string | null>(null);
-  const [viewing, setViewing] = useState<Property | null>(null);
+  const [viewing, setViewing] = useState<ListProperty | null>(null);
+  const [saving, setSaving] = useState(false);
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
 
   const normalizedQuery = query.trim().toLowerCase();
@@ -105,49 +108,43 @@ export function AdminPropertiesClient({
     setFeedback(null);
   }
 
-  function updateStatus(property: Property, nextStatus: PropertyStatus) {
-    setProperties((current) =>
-      current.map((row) =>
-        row.id === property.id ? { ...row, status: nextStatus } : row,
-      ),
-    );
-    setFeedback(
-      `${property.id} changed to "${adminPropertyStatusLabels[nextStatus]}" in this browser session only. No data was saved.`,
-    );
-  }
-
-  function confirmPublishAction() {
-    if (!pendingAction) {
-      return;
-    }
-
-    const nextStatus: PropertyStatus =
-      pendingAction.type === "publish" ? "available" : "draft";
-    setProperties((current) =>
-      current.map((row) =>
-        row.id === pendingAction.propertyId
-          ? { ...row, status: nextStatus }
-          : row,
-      ),
-    );
-    setFeedback(
-      pendingAction.type === "publish"
-        ? `${pendingAction.propertyId} was marked available in this preview only. The public catalogue and database are unchanged.`
-        : `${pendingAction.propertyId} was moved to draft in this preview only. The public catalogue is unchanged.`,
-    );
-  }
-
-  function handleStatusChange(property: Property, value: string) {
-    const nextStatus = propertyStatusOptions.find(
-      (option) => option.value === value,
-    )?.value;
-
-    if (nextStatus) {
-      updateStatus(property, nextStatus);
+  async function confirmStatusAction() {
+    if (!pendingAction || saving) return;
+    const action = pendingAction;
+    setSaving(true);
+    try {
+      const result = await updateBrokerPropertyStatus(action.propertyId, action.status);
+      if (!result.ok) { setFeedback(result.message); return; }
+      router.refresh();
+      setFeedback(`${action.propertyId} saved as ${adminPropertyStatusLabels[action.status]}.${result.warning ? ` ${result.warning}` : ""}`);
+    } catch {
+      setFeedback("Unable to update the property. Please try again.");
+    } finally {
+      setSaving(false);
+      setPendingAction(null);
     }
   }
 
-  const columns: Array<AdminTableColumn<Property>> = [
+  function statusControl(property: ListProperty) {
+    return (
+      <NativeSelect
+        aria-label={`Change status for ${property.id}`}
+        value={property.status}
+        disabled={saving}
+        onChange={(event) => setPendingAction({
+          status: event.target.value as PropertyStatus,
+          propertyId: property.id,
+          propertyTitle: property.title,
+        })}
+      >
+        {propertyStatusOptions.map((option) => (
+          <option key={option.value} value={option.value}>{option.label}</option>
+        ))}
+      </NativeSelect>
+    );
+  }
+
+  const columns: Array<AdminTableColumn<ListProperty>> = [
     {
       id: "id",
       header: "Property ID",
@@ -249,49 +246,8 @@ export function AdminPropertiesClient({
                 <Pencil aria-hidden="true" />
               </Link>
             </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-sm"
-              title={
-                property.status === "draft"
-                  ? "Publish (demo)"
-                  : "Unpublish (demo)"
-              }
-              aria-label={
-                property.status === "draft"
-                  ? `Publish ${property.id} (demo)`
-                  : `Unpublish ${property.id} (demo)`
-              }
-              onClick={() =>
-                setPendingAction({
-                  type: property.status === "draft" ? "publish" : "unpublish",
-                  propertyId: property.id,
-                  propertyTitle: property.title,
-                })
-              }
-            >
-              {property.status === "draft" ? (
-                <Send aria-hidden="true" />
-              ) : (
-                <Undo2 aria-hidden="true" />
-              )}
-            </Button>
+            {statusControl(property)}
           </div>
-          <NativeSelect
-            value={property.status}
-            onChange={(event) =>
-              handleStatusChange(property, event.target.value)
-            }
-            aria-label={`Change status for ${property.id}`}
-            className="h-8 w-40 text-xs"
-          >
-            {propertyStatusOptions.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </NativeSelect>
         </div>
       ),
     },
@@ -312,7 +268,7 @@ export function AdminPropertiesClient({
             {properties.length === 1 ? "property" : "properties"}
           </p>
           <p className="text-xs text-muted-foreground">
-            Status and publish changes are preview-only
+            Change listing availability status
           </p>
         </div>
 
@@ -427,14 +383,14 @@ export function AdminPropertiesClient({
         </Card>
       </div>
 
-      <DemoFeedback message={feedback} className="mt-4" />
+      {feedback ? <p role="status" className="mt-4 rounded-lg border border-border p-4 text-sm">{feedback}</p> : null}
 
       {filtered.length === 0 ? (
         <EmptyState
           className="mt-4"
           icon={Search}
           title="No properties match these filters"
-          description="Try a different search term, or clear the filters to see the complete demo catalogue."
+          description="Try a different search term, or clear the filters to see the complete catalogue."
           action={
             <Button type="button" variant="outline" onClick={clearFilters}>
               <RotateCcw aria-hidden="true" />
@@ -475,29 +431,6 @@ export function AdminPropertiesClient({
                   <VerificationBadge status={property.verificationStatus} />
                 </div>
 
-                <div className="space-y-2">
-                  <label
-                    htmlFor={`mobile-status-${property.id}`}
-                    className={filterLabelClass}
-                  >
-                    Change status (demo)
-                  </label>
-                  <NativeSelect
-                    id={`mobile-status-${property.id}`}
-                    value={property.status}
-                    onChange={(event) =>
-                      handleStatusChange(property, event.target.value)
-                    }
-                    className="h-9"
-                  >
-                    {propertyStatusOptions.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </NativeSelect>
-                </div>
-
                 <div className="flex flex-wrap gap-2 border-t border-border pt-3">
                   <Button
                     type="button"
@@ -514,31 +447,7 @@ export function AdminPropertiesClient({
                       Edit
                     </Link>
                   </Button>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() =>
-                      setPendingAction({
-                        type:
-                          property.status === "draft" ? "publish" : "unpublish",
-                        propertyId: property.id,
-                        propertyTitle: property.title,
-                      })
-                    }
-                  >
-                    {property.status === "draft" ? (
-                      <>
-                        <Send aria-hidden="true" />
-                        Publish
-                      </>
-                    ) : (
-                      <>
-                        <Undo2 aria-hidden="true" />
-                        Unpublish
-                      </>
-                    )}
-                  </Button>
+                  {statusControl(property)}
                 </div>
               </Card>
             ))}
@@ -568,7 +477,7 @@ export function AdminPropertiesClient({
           viewing ? (
             <div className="flex flex-col gap-2 sm:flex-row sm:justify-between">
               <p className="text-xs leading-relaxed text-muted-foreground">
-                Demo record — confirm all details before acting.
+                Confirm property details before acting.
               </p>
               <Button asChild>
                 <Link href={`/admin/properties/${viewing.id}/edit`}>
@@ -626,38 +535,22 @@ export function AdminPropertiesClient({
             </dl>
 
             <p className="rounded-lg border border-dashed border-border bg-muted/40 px-3 py-2 text-xs leading-relaxed text-muted-foreground">
-              This preview shows local demo data only. Changes to status are not
-              saved.
+              Review the property details before publishing or moving it to draft.
             </p>
           </div>
         ) : null}
       </AdminModal>
 
-      <ConfirmDialog
-        open={pendingAction !== null}
-        onClose={() => setPendingAction(null)}
-        onConfirm={confirmPublishAction}
-        title={
-          pendingAction?.type === "publish"
-            ? "Publish this listing?"
-            : "Move this listing to draft?"
-        }
-        description={
-          pendingAction
-            ? `${pendingAction.propertyId} — ${pendingAction.propertyTitle}. This changes the status only in the current browser preview; the public catalogue is not affected.`
-            : ""
-        }
-        confirmLabel={
-          pendingAction?.type === "publish"
-            ? "Publish preview"
-            : "Unpublish preview"
-        }
-      />
+      <AdminModal open={pendingAction !== null} onClose={() => { if (!saving) setPendingAction(null); }}
+        title={pendingAction ? `Change status to ${adminPropertyStatusLabels[pendingAction.status]}?` : "Change status?"}
+        footer={<div className="flex gap-2"><Button type="button" variant="outline" disabled={saving} onClick={() => setPendingAction(null)}>Cancel</Button><Button type="button" disabled={saving} onClick={confirmStatusAction}>{saving ? "Saving…" : "Confirm"}</Button></div>}>
+        <p>{pendingAction?.propertyId} — {pendingAction?.propertyTitle}</p>
+        {pendingAction && !["available", "under-offer"].includes(pendingAction.status) ? (
+          <p className="mt-2">This listing will no longer be visible on the public website.</p>
+        ) : null}
+      </AdminModal>
 
-      <p className="mt-4 flex items-center gap-2 text-xs text-muted-foreground">
-        <Plus aria-hidden="true" className="size-3.5" />
-        Add Property creates a browser-only draft preview. No listing is stored.
-      </p>
+
     </div>
   );
 }

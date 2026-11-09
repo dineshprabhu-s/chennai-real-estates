@@ -5,7 +5,7 @@ import { Notice } from "@/components/common/notice";
 import { PropertyForm } from "@/components/forms/property-form";
 import { Card } from "@/components/ui/card";
 import { requireBroker } from "@/lib/auth/broker";
-import { getAreasWithCounts } from "@/modules/areas/queries";
+import { getBrokerAreas } from "@/lib/supabase/queries/broker-areas";
 
 export const metadata: Metadata = {
   title: "Add property",
@@ -17,10 +17,8 @@ export const instant = false;
 export default async function NewPropertyPage() {
   await requireBroker();
 
-  const areas = getAreasWithCounts().map((area) => ({
-    slug: area.slug,
-    name: area.name,
-  }));
+  const areas = (await getBrokerAreas()).filter((area) => area.isActive);
+  const listedAt = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
 
   return (
     <div>
@@ -31,16 +29,15 @@ export default async function NewPropertyPage() {
         ]}
         eyebrow="Properties"
         title="Add a property"
-        description="Prepare a complete listing with pricing, verification, brokerage, and image previews. Validation runs in the browser."
+        description="Prepare a listing with pricing, verification and brokerage details."
       />
 
       <Notice className="mt-6">
-        Development preview — this form does not save or publish anything.
         Selected images stay in your browser and are never uploaded.
       </Notice>
 
       <Card className="mt-6 p-5 sm:p-8">
-        <PropertyForm areas={areas} />
+        <PropertyForm areas={areas} listedAt={listedAt} />
       </Card>
     </div>
   );

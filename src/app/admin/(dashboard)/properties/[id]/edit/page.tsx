@@ -6,8 +6,8 @@ import { Notice } from "@/components/common/notice";
 import { PropertyForm } from "@/components/forms/property-form";
 import { Card } from "@/components/ui/card";
 import { requireBroker } from "@/lib/auth/broker";
-import { getAreasWithCounts } from "@/modules/areas/queries";
-import { getPropertyById } from "@/modules/properties/queries";
+import { getBrokerAreas } from "@/lib/supabase/queries/broker-areas";
+import { getBrokerPropertyById } from "@/lib/supabase/queries/broker-properties";
 
 // Session-guarded admin pages are allowed to block during navigation.
 export const instant = false;
@@ -19,12 +19,8 @@ interface EditPropertyPageProps {
 export async function generateMetadata({
   params,
 }: EditPropertyPageProps): Promise<Metadata> {
-  const { id } = await params;
-  const property = getPropertyById(id);
-
-  return {
-    title: property ? `Edit ${property.title}` : "Property not found",
-  };
+  await params;
+  return { title: "Edit property" };
 }
 
 export default async function EditPropertyPage({
@@ -33,16 +29,16 @@ export default async function EditPropertyPage({
   await requireBroker();
 
   const { id } = await params;
-  const property = getPropertyById(id);
+  const property = await getBrokerPropertyById(id);
 
   if (!property) {
     notFound();
   }
 
-  const areas = getAreasWithCounts().map((area) => ({
-    slug: area.slug,
-    name: area.name,
-  }));
+  const areas = (await getBrokerAreas()).filter((area) => area.isActive || area.slug === property.areaSlug);
+  // Only fields used by this authorized form cross the client boundary.
+  const { id: propertyId, title, summary, description, publicDescription, type, configuration, listingType, status, price, priceNegotiable, bedrooms, bathrooms, builtUpAreaSqft, carpetAreaSqft, udsSqft, floor, facing, buildingAgeYears, hasLift, parking, furnishing, approvalStatus, brokerage, brokerageType, brokerageValue, landmark, address, totalFloors, securityDeposit, lastVerifiedAt, areaSlug, features, isFeatured, verificationStatus } = property;
+  const formProperty = { id: propertyId, title, summary, description, publicDescription, type, configuration, listingType, status, price, priceNegotiable, bedrooms, bathrooms, builtUpAreaSqft, carpetAreaSqft, udsSqft, floor, facing, buildingAgeYears, hasLift, parking, furnishing, approvalStatus, brokerage, brokerageType, brokerageValue, landmark, address, totalFloors, securityDeposit, lastVerifiedAt, areaSlug, features, isFeatured, verificationStatus };
 
   return (
     <div>
@@ -54,16 +50,15 @@ export default async function EditPropertyPage({
         ]}
         eyebrow="Properties"
         title="Edit property"
-        description={`Working on ${property.id}: ${property.title}. All available demo details are prefilled and optional fields remain blank where no value exists.`}
+        description={`Working on ${property.id}: ${property.title}. Available details are prefilled; saving changes preserves fields not edited here.`}
       />
 
       <Notice className="mt-6">
-        Development preview — changes are validated in the browser but are not
-        saved. Existing demo data and public pages remain unchanged.
+        Selected images stay in your browser and are never uploaded.
       </Notice>
 
       <Card className="mt-6 p-5 sm:p-8">
-        <PropertyForm areas={areas} property={property} />
+        <PropertyForm areas={areas} property={formProperty} />
       </Card>
     </div>
   );

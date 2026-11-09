@@ -3,6 +3,7 @@
 import { ArrowLeft, Save, Send, ShieldAlert } from "lucide-react";
 import Link from "next/link";
 import {
+  useRef,
   useState,
   type FormEvent,
   type ReactNode,
@@ -10,7 +11,8 @@ import {
 
 import { FormField } from "@/components/forms/form-field";
 import { ImagePreviewSelector } from "@/components/forms/image-preview-selector";
-import { DemoFeedback } from "@/components/admin/demo-feedback";
+import { adaptPropertyForm } from "@/components/forms/property-form-adapter";
+import { createBrokerProperty, updateBrokerProperty } from "@/app/admin/(dashboard)/properties/actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { NativeSelect } from "@/components/ui/native-select";
@@ -22,7 +24,6 @@ import {
   furnishingOptions,
   listingTypeOptions,
   propertyConfigurationOptions,
-  propertyStatusOptions,
   propertyTypeOptions,
   verificationStatusOptions,
 } from "@/modules/properties/constants";
@@ -34,14 +35,18 @@ import type {
 } from "@/types/property";
 import type { Property } from "@/types/property";
 
+type FormProperty = Pick<Property, "id" | "title" | "summary" | "description" | "type" | "configuration" | "listingType" | "status" | "price" | "priceNegotiable" | "bedrooms" | "bathrooms" | "builtUpAreaSqft" | "carpetAreaSqft" | "udsSqft" | "floor" | "facing" | "buildingAgeYears" | "hasLift" | "parking" | "furnishing" | "approvalStatus" | "brokerage" | "brokerageType" | "brokerageValue" | "landmark" | "address" | "totalFloors" | "securityDeposit" | "lastVerifiedAt" | "areaSlug" | "features" | "isFeatured" | "verificationStatus"> & { publicDescription: string[] };
+
 interface AreaOption {
   slug: string;
   name: string;
+  isActive?: boolean;
 }
 
 interface PropertyFormProps {
   areas: AreaOption[];
-  property?: Property;
+  property?: FormProperty;
+  listedAt?: string;
   cancelHref?: string;
 }
 
@@ -84,15 +89,13 @@ function FormSection({
 }
 
 /**
- * Full property form preview shared by the add and edit screens.
- *
- * Validation runs in the browser. Submission deliberately performs no request:
- * the feedback message makes clear that nothing is saved, published, or
- * uploaded in this development phase.
+ * Property form shared by the add and edit screens.
+ * Server actions revalidate all submitted data before saving.
  */
 export function PropertyForm({
   areas,
   property,
+  listedAt,
   cancelHref = "/admin/properties",
 }: PropertyFormProps) {
   const prefix = property ? `edit-${property.id}` : "new-property";
@@ -104,11 +107,21 @@ export function PropertyForm({
   );
   const [verificationStatus, setVerificationStatus] =
     useState<VerificationStatus>(property?.verificationStatus ?? "sample");
-  const [brokerageType, setBrokerageType] = useState<BrokerageType>(
-    property?.brokerageType ?? (property?.brokerage ? "percentage" : "none"),
+  // Free-form brokerage and structured terms are independent database fields.
+  const [brokerageText, setBrokerageText] = useState(property?.brokerage ?? "");
+  const [brokerageType, setBrokerageType] = useState<BrokerageType | "">(
+    property ? property.brokerageType ?? "" : "none",
   );
+  const [brokerageValue, setBrokerageValue] = useState(property?.brokerageValue ?? "");
+  const [brokerageTextEdited, setBrokerageTextEdited] = useState(false);
+  const [brokerageTypeEdited, setBrokerageTypeEdited] = useState(false);
+  const [brokerageValueEdited, setBrokerageValueEdited] = useState(false);
   const [errors, setErrors] = useState<FieldErrors>({});
   const [feedback, setFeedback] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [createdId, setCreatedId] = useState<string | null>(null);
+  const [currentStatus, setCurrentStatus] = useState(property?.status);
+  const edited = useRef(new Set<string>());
 
   function id(name: string) {
     return `${prefix}-${name}`;
@@ -135,7 +148,6 @@ export function PropertyForm({
     const description = value("description");
     const price = number("price");
     const builtUp = value("builtUpAreaSqft");
-    const brokerageValue = value("brokerageValue");
     const approved = value("approvalStatus");
     const verified = value("verificationStatus");
     const verifiedAt = value("lastVerifiedAt");
@@ -180,7 +192,7 @@ export function PropertyForm({
       }
     }
 
-    if (brokerageType !== "none" && brokerageValue.length === 0) {
+    if ((brokerageTypeEdited || brokerageValueEdited) && brokerageType !== "" && brokerageType !== "none" && brokerageValue.trim().length === 0) {
       next.brokerageValue =
         "Add the brokerage value, for example 2 or a fixed amount.";
     }
@@ -198,11 +210,18 @@ export function PropertyForm({
     return next;
   }
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = event.currentTarget;
-    const data = new FormData(form);
-    const intent = data.get("intent") === "draft" ? "draft" : "publish";
+    const submitter = (event.nativeEvent as SubmitEvent).submitter;
+    const data = submitter instanceof HTMLElement
+      ? new FormData(form, submitter)
+      : new FormData(form);
+    const intent = data.get("intent");
+    if (intent !== "draft" && intent !== "publish" && !(intent === "preserve" && property)) {
+      setFeedback("Choose Save as Draft or Publish Listing.");
+      return;
+    }
     const nextErrors = validate(data);
     const firstError = Object.keys(nextErrors)[0];
 
@@ -214,15 +233,43 @@ export function PropertyForm({
       return;
     }
 
-    setFeedback(
-      intent === "draft"
-        ? "Demo preview only — the draft was not saved. Connect the property data layer to persist listings."
-        : "Demo preview only — the listing was not published. No property data was stored or sent.",
-    );
+    const payload = adaptPropertyForm(data, property ? "edit" : "create", edited.current);
+    setSaving(true);
+    setFeedback(null);
+    try {
+      const result = property
+        ? await updateBrokerProperty(property.id, payload, intent)
+        : await createBrokerProperty(payload, intent);
+      if (!result.ok) {
+        setErrors(result.fields ?? {});
+        setFeedback(result.message);
+        return;
+      }
+      setErrors({});
+      setFeedback(`${result.changed ? "Saved" : "No changes to save"}: ${result.id}.${result.warning ? ` ${result.warning}` : ""}`);
+      if (!property) setCreatedId(result.id);
+      else {
+        if (intent === "draft") setCurrentStatus("draft");
+        if (intent === "publish") setCurrentStatus("available");
+        edited.current.clear();
+      }
+    } catch {
+      setFeedback("Unable to save the property. Please try again.");
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
-    <form onSubmit={handleSubmit} noValidate className="space-y-9">
+    <form onSubmit={handleSubmit} noValidate className="space-y-9"
+      onKeyDown={(event) => { if (event.key === "Enter" && event.target instanceof HTMLInputElement) event.preventDefault(); }}
+      onChangeCapture={(event) => {
+        const element = event.target;
+        if (!(element instanceof HTMLInputElement || element instanceof HTMLSelectElement || element instanceof HTMLTextAreaElement)) return;
+        const name = element.name || (element.id.startsWith(`${prefix}-`) ? element.id.slice(prefix.length + 1) : "");
+        if (name) edited.current.add(name);
+      }}>
+      {!property && listedAt ? <input type="hidden" name="listedAt" value={listedAt} /> : null}
       <FormSection
         letter="A"
         title="Basic information"
@@ -337,12 +384,17 @@ export function PropertyForm({
             >
               {areas.map((area) => (
                 <option key={area.slug} value={area.slug}>
-                  {area.name}
+                  {area.name}{area.isActive === false ? " (inactive)" : ""}
                 </option>
               ))}
             </NativeSelect>
           </FormField>
 
+          {!property ? (
+            <FormField label="Locality display name" htmlFor={id("locality")} required error={errors.locality} errorId={errorId("locality")}>
+              <Input id={id("locality")} name="locality" placeholder="e.g. Guperan Nagar, Madipakkam" {...errorProps("locality")} />
+            </FormField>
+          ) : null}
           <FormField
             label="Address"
             htmlFor={id("address")}
@@ -372,7 +424,7 @@ export function PropertyForm({
         </div>
 
         <FormField
-          label="Description"
+          label="Private broker description"
           htmlFor={id("description")}
           required
           error={errors.description}
@@ -386,6 +438,10 @@ export function PropertyForm({
             className="min-h-32"
             {...errorProps("description")}
           />
+        </FormField>
+
+        <FormField label="Public description" htmlFor={id("publicDescription")} hint="Shown to visitors" error={errors.publicDescription} errorId={errorId("publicDescription")}>
+          <Textarea id={id("publicDescription")} name="publicDescription" defaultValue={property?.publicDescription.join("\n\n") ?? ""} placeholder="Enter the customer-visible description separately." className="min-h-32" {...errorProps("publicDescription")} />
         </FormField>
 
         <FormField
@@ -732,23 +788,7 @@ export function PropertyForm({
             </NativeSelect>
           </FormField>
 
-          <FormField
-            label="Availability status"
-            htmlFor={id("status")}
-            hint="Publishing sets this to Available"
-          >
-            <NativeSelect
-              id={id("status")}
-              name="status"
-              defaultValue={property?.status ?? "draft"}
-            >
-              {propertyStatusOptions.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </NativeSelect>
-          </FormField>
+          <p className="text-sm text-muted-foreground">Current status: {currentStatus ?? "new listing"}. Choose Publish or Save as Draft to change it.</p>
 
           <FormField
             label="Last verified"
@@ -797,15 +837,29 @@ export function PropertyForm({
         description="Record the brokerage terms separately from the property price."
       >
         <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+          <FormField label="Brokerage terms" htmlFor={id("brokerage")} hint="Free-form terms">
+            <Input
+              id={id("brokerage")}
+              name={brokerageTextEdited ? "brokerage" : undefined}
+              value={brokerageText}
+              onChange={(event) => {
+                setBrokerageText(event.target.value);
+                setBrokerageTextEdited(true);
+              }}
+              placeholder="e.g. 2%"
+            />
+          </FormField>
           <FormField label="Brokerage type" htmlFor={id("brokerageType")}>
             <NativeSelect
               id={id("brokerageType")}
-              name="brokerageType"
+              name={brokerageTypeEdited ? "brokerageType" : undefined}
               value={brokerageType}
-              onChange={(event) =>
-                setBrokerageType(event.target.value as BrokerageType)
-              }
+              onChange={(event) => {
+                setBrokerageType(event.target.value as BrokerageType | "");
+                setBrokerageTypeEdited(true);
+              }}
             >
+              <option value="">Not specified</option>
               {brokerageTypeOptions.map((option) => (
                 <option key={option.value} value={option.value}>
                   {option.label}
@@ -814,7 +868,7 @@ export function PropertyForm({
             </NativeSelect>
           </FormField>
 
-          {brokerageType !== "none" ? (
+          {brokerageType !== "" && brokerageType !== "none" ? (
             <FormField
               label="Brokerage value"
               htmlFor={id("brokerageValue")}
@@ -828,12 +882,19 @@ export function PropertyForm({
             >
               <Input
                 id={id("brokerageValue")}
-                name="brokerageValue"
-                defaultValue={property?.brokerageValue ?? property?.brokerage}
+                name={brokerageValueEdited ? "brokerageValue" : undefined}
+                value={brokerageValue}
+                onChange={(event) => {
+                  setBrokerageValue(event.target.value);
+                  setBrokerageValueEdited(true);
+                }}
                 placeholder={brokerageType === "percentage" ? "2" : "50000"}
                 {...errorProps("brokerageValue")}
               />
             </FormField>
+          ) : null}
+          {brokerageTypeEdited && brokerageType === "none" ? (
+            <input type="hidden" name="brokerageValue" value="" />
           ) : null}
         </div>
       </FormSection>
@@ -863,8 +924,7 @@ export function PropertyForm({
               Listing actions
             </h2>
             <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
-              Both actions are simulations. Nothing is saved, uploaded, or
-              published in this development preview.
+              Save changes, publish the listing, or save it as a draft.
             </p>
           </div>
         </div>
@@ -886,17 +946,19 @@ export function PropertyForm({
           </span>
         </label>
 
-        <DemoFeedback message={feedback} className="mt-5" />
+        {feedback ? <p role="status" aria-live="polite" className="mt-5 rounded-lg border border-border p-4 text-sm">{feedback}</p> : null}
+        {createdId ? <p className="mt-3 text-sm"><Link className="text-primary underline" href={`/admin/properties/${encodeURIComponent(createdId)}/edit`}>Edit {createdId}</Link>{" · "}<Link className="text-primary underline" href="/admin/properties">Property list</Link></p> : null}
 
         <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
-          <Button type="submit" name="intent" value="draft" variant="outline">
+          <Button type="submit" name="intent" value="draft" variant="outline" disabled={saving || !!createdId}>
             <Save aria-hidden="true" />
             Save as Draft
           </Button>
-          <Button type="submit" name="intent" value="publish">
+          <Button type="submit" name="intent" value="publish" disabled={saving || !!createdId}>
             <Send aria-hidden="true" />
             Publish Listing
           </Button>
+          {property ? <Button type="submit" name="intent" value="preserve" variant="secondary" disabled={saving}>Save changes</Button> : null}
           <Button asChild variant="ghost">
             <Link href={cancelHref}>
               <ArrowLeft aria-hidden="true" />
@@ -906,8 +968,7 @@ export function PropertyForm({
         </div>
 
         <p className="mt-4 text-xs leading-relaxed text-muted-foreground">
-          Preview only. No property record is created or updated, and no image
-          is uploaded.
+          {saving ? "Saving…" : "Property images are previews and are not uploaded."}
         </p>
       </section>
     </form>

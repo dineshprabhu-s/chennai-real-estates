@@ -3,11 +3,10 @@ import type { Metadata } from "next";
 import Link from "next/link";
 
 import { AdminPageHeader } from "@/components/admin/admin-page-header";
-import { Notice } from "@/components/common/notice";
 import { Button } from "@/components/ui/button";
 import { requireBroker } from "@/lib/auth/broker";
-import { getAreasWithCounts } from "@/modules/areas/queries";
-import { getAllProperties } from "@/modules/properties/queries";
+import { getBrokerAreas } from "@/lib/supabase/queries/broker-areas";
+import { getBrokerProperties } from "@/lib/supabase/queries/broker-properties";
 
 import { AdminPropertiesClient } from "./admin-properties-client";
 
@@ -21,10 +20,9 @@ export const instant = false;
 export default async function AdminPropertiesPage() {
   await requireBroker();
 
-  const properties = getAllProperties();
-  const areas = getAreasWithCounts().map((area) => ({
-    slug: area.slug,
-    name: area.name,
+  const [records, areas] = await Promise.all([getBrokerProperties(), getBrokerAreas()]);
+  const properties = records.map(({ id, title, summary, locality, areaSlug, type, configuration, listingType, price, status, verificationStatus, updatedAt, builtUpAreaSqft, facing, bedrooms, bathrooms, floor, approvalStatus, brokerage }) => ({
+    id, title, summary, locality, areaSlug, type, configuration, listingType, price, status, verificationStatus, updatedAt, builtUpAreaSqft, facing, bedrooms, bathrooms, floor, approvalStatus, brokerage,
   }));
 
   return (
@@ -33,7 +31,7 @@ export default async function AdminPropertiesPage() {
         breadcrumbs={[{ label: "Properties" }]}
         eyebrow="Properties"
         title="Property management"
-        description="Search, filter, review, and preview status changes across the demo catalogue. Property IDs and verification labels are preserved."
+        description="Search, filter and review the property catalogue. Property IDs and verification labels are preserved."
         actions={
           <Button asChild>
             <Link href="/admin/properties/new">
@@ -43,12 +41,6 @@ export default async function AdminPropertiesPage() {
           </Button>
         }
       />
-
-      <Notice className="mt-6">
-        Development preview — all nine sample listings are shown. Publish,
-        unpublish, and status changes update this browser session only and never
-        alter the public catalogue.
-      </Notice>
 
       <AdminPropertiesClient initialProperties={properties} areas={areas} />
     </div>
