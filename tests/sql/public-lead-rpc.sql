@@ -173,7 +173,7 @@ select public.submit_public_lead(
   '+91 90000 12346',
   'test@example.com',
   'This is a valid property enquiry message.',
-  'MAD-0001'
+  '  MAD-0001  '
 );
 reset role;
 
@@ -266,6 +266,24 @@ begin
   begin
     perform public.submit_public_lead('Test', '9000012347', null, repeat('m', 4001), null);
     raise exception 'FAIL: long message was accepted';
+  exception when sqlstate '22023' then null;
+  end;
+
+  begin
+    perform public.submit_public_lead('Test', '9000012347', null, 'This is a valid message.', '');
+    raise exception 'FAIL: empty property ID was accepted';
+  exception when sqlstate '22023' then null;
+  end;
+
+  begin
+    perform public.submit_public_lead('Test', '9000012347', null, 'This is a valid message.', E' \t\n\r');
+    raise exception 'FAIL: whitespace-only property ID was accepted';
+  exception when sqlstate '22023' then null;
+  end;
+
+  begin
+    perform public.submit_public_lead('Test', '9000012347', null, 'This is a valid message.', pg_catalog.chr(11));
+    raise exception 'FAIL: vertical-tab-only property ID was accepted';
   exception when sqlstate '22023' then null;
   end;
 

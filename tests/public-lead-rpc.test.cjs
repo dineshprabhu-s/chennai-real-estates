@@ -5,12 +5,15 @@ const path = require('node:path');
 
 const root = path.resolve(__dirname, '..');
 const migrationDir = path.join(root, 'supabase', 'migrations');
-const migrationName = fs
+const originalMigration = fs
   .readdirSync(migrationDir)
   .find((name) => name.endsWith('_public_lead_submission.sql'));
 
-assert(migrationName, 'public lead submission migration was not found');
+assert(originalMigration, 'public lead submission migration was not found');
+const correctiveMigration = '20261110000000_reject_blank_public_lead_property_id.sql';
+assert(fs.existsSync(path.join(migrationDir, correctiveMigration)), 'corrective migration was not found');
 
+function verifyMigration(migrationName) {
 const migrationPath = path.join(migrationDir, migrationName);
 const sql = fs.readFileSync(migrationPath, 'utf8');
 const compact = sql.replace(/\s+/g, ' ').trim();
@@ -99,6 +102,11 @@ assert.match(compact, /v_email !~ '\^\[\^\[:space:\]@\]\+@\[\^\[:space:\]@\]\+\[
 assert.match(compact, /pg_catalog\.char_length\(v_message\) < 10/i, 'message minimum is missing');
 assert.match(compact, /pg_catalog\.char_length\(v_message\) > 4000/i, 'message maximum is missing');
 assert.match(compact, /pg_catalog\.char_length\(v_property_id\) > 64/i, 'property ID maximum is missing');
+if (migrationName === correctiveMigration) {
+  assert.match(compact, /v_property_id text := pg_catalog\.btrim\(\s*p_property_id,\s*E' \\t\\n\\r\\f' \|\| pg_catalog\.chr\(11\)\s*\)/i, 'property ID must trim vertical tabs while preserving NULL');
+  assert.match(compact, /if p_property_id is not null and v_property_id = '' then raise exception 'Invalid enquiry' using errcode = '22023'/i, 'explicit blank property IDs must be rejected');
+  assert.doesNotMatch(compact, /when p_property_id is null or pg_catalog\.btrim\(p_property_id[^)]*\) = '' then null/i, 'blank property IDs must not become NULL');
+}
 
 // --- Property visibility ---------------------------------------------------
 assert.match(
@@ -164,9 +172,19 @@ for (const required of [
   'P0002',
   'rollback',
   'Manual atomicity check',
+  'empty property ID was accepted',
+  'whitespace-only property ID was accepted',
+  'vertical-tab-only property ID was accepted',
 ]) {
   assert.equal(sqlTest.includes(required), true, `SQL verification script is missing: ${required}`);
 }
+assert.match(sqlTest, /empty property ID was accepted';\s*exception when sqlstate '22023'/i);
+assert.match(sqlTest, /whitespace-only property ID was accepted';\s*exception when sqlstate '22023'/i);
+assert.match(sqlTest, /public\.submit_public_lead\([^;]*pg_catalog\.chr\(11\)\);\s*raise exception 'FAIL: vertical-tab-only property ID was accepted';\s*exception when sqlstate '22023'/i);
 
 console.log(`Public lead submission RPC checks passed for ${migrationName}.`);
+}
+
+verifyMigration(originalMigration);
+verifyMigration(correctiveMigration);
 console.log('SQL verification script exists; no SQL was executed.');

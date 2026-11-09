@@ -85,6 +85,26 @@ async function run() {
   assert.equal(general.values.message, 'Please share more details about this home.');
   assert.equal(general.values.propertyId, null);
 
+  const missingProperty = validation.validatePublicLeadInput({
+    name: 'Asha', phone: '9000012345', email: '', message: 'A valid message here.',
+  });
+  assert.equal(missingProperty.ok, true);
+  assert.equal(missingProperty.values.propertyId, null);
+  const emptyProperty = validation.validatePublicLeadInput({
+    name: 'Asha', phone: '9000012345', email: '', message: 'A valid message here.', propertyId: '',
+  });
+  assert.equal(emptyProperty.ok, false);
+  assert.equal(emptyProperty.message, validation.publicLeadMessages.invalidPropertyReference);
+  const trimmedProperty = validation.validatePublicLeadInput({
+    name: 'Asha', phone: '9000012345', email: '', message: 'A valid message here.', propertyId: '  MAD-0001  ',
+  });
+  assert.equal(trimmedProperty.ok, true);
+  assert.equal(trimmedProperty.values.propertyId, 'MAD-0001');
+  const maxProperty = validation.validatePublicLeadInput({
+    name: 'Asha', phone: '9000012345', email: '', message: 'A valid message here.', propertyId: 'P'.repeat(64),
+  });
+  assert.equal(maxProperty.ok, true);
+
   const blankProperty = validation.validatePublicLeadInput({
     name: 'Asha', phone: '9000012345', email: '', message: 'A valid message here.', propertyId: '   ',
   });
@@ -187,6 +207,13 @@ async function run() {
   assert.equal(rpcCalls.length, 0);
 
   // An invalid property reference must never become a general enquiry.
+  for (const propertyId of ['', ' \t\n']) {
+    reset();
+    const result = await actions.submitPublicLead(validInput({ propertyId }));
+    assert.equal(result.ok, false);
+    assert.equal(result.kind, 'validation');
+    assert.equal(rpcCalls.length, 0);
+  }
   reset();
   const invalidProperty = await actions.submitPublicLead(validInput({ propertyId: 'P'.repeat(65) }));
   assert.equal(invalidProperty.ok, false);
