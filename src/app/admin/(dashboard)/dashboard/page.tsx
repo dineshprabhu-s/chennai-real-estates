@@ -8,7 +8,6 @@ import {
   Inbox,
   MapPin,
   Plus,
-  Search,
 } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
@@ -19,7 +18,6 @@ import {
   LeadStatusBadge,
 } from "@/components/admin/badges";
 import { StatCard } from "@/components/admin/stat-card";
-import { Notice } from "@/components/common/notice";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -41,9 +39,9 @@ import {
 import { leadSourceLabels } from "@/modules/leads/constants";
 import { listingTypeLabels } from "@/modules/properties/constants";
 import {
-  getPropertyStats,
-  getRecentProperties,
-} from "@/modules/properties/queries";
+  getBrokerPropertyStats,
+  getRecentBrokerProperties,
+} from "@/lib/supabase/queries/broker-dashboard";
 
 export const metadata: Metadata = {
   title: "Dashboard",
@@ -61,7 +59,7 @@ const quickActions = [
   },
   {
     label: "View all properties",
-    description: "Search and filter all nine demo listings.",
+    description: "Search and filter property listings.",
     href: "/admin/properties",
     icon: Building2,
   },
@@ -73,7 +71,7 @@ const quickActions = [
   },
   {
     label: "Manage areas",
-    description: "Review the localities and their mapped demo listings.",
+    description: "Manage localities and their mapped listings.",
     href: "/admin/areas",
     icon: MapPin,
   },
@@ -89,9 +87,9 @@ export default async function AdminDashboardPage() {
     recentLeads,
     leadProperties,
   ] = await Promise.all([
-    getPropertyStats(),
+    getBrokerPropertyStats(),
     getBrokerLeadStats(),
-    getRecentProperties(5),
+    getRecentBrokerProperties(5),
     getRecentBrokerLeads(5),
     getBrokerPropertyOptions(),
   ]);
@@ -117,11 +115,7 @@ export default async function AdminDashboardPage() {
         }
       />
 
-      <Notice className="mt-6">
-        Development preview — property statistics and recent listings still use
-        demo records. Enquiry statistics and recent enquiries are read from
-        Supabase, with seeded demo rows labelled individually.
-      </Notice>
+
 
       <section aria-labelledby="property-stats-heading" className="mt-8">
         <h2
@@ -134,13 +128,13 @@ export default async function AdminDashboardPage() {
           <StatCard
             label="Total properties"
             value={propertyStats.total}
-            description="All demo records, including drafts."
+            description="All records, including drafts."
             icon={Building2}
           />
           <StatCard
             label="Available"
             value={propertyStats.available}
-            description="Listed as available in the demo catalogue."
+            description="Properties listed as available."
             icon={CheckCircle2}
           />
           <StatCard
@@ -152,7 +146,7 @@ export default async function AdminDashboardPage() {
           <StatCard
             label="Closed"
             value={propertyStats.closed}
-            description="Deals closed in the demo catalogue."
+            description="Properties marked closed."
             icon={BadgeCheck}
           />
         </div>
@@ -195,7 +189,7 @@ export default async function AdminDashboardPage() {
                 Recent properties
               </h2>
               <p className="mt-0.5 text-xs text-muted-foreground">
-                Most recently updated demo listings
+                Most recently updated listings
               </p>
             </div>
             <Button asChild variant="ghost" size="sm">
@@ -218,6 +212,7 @@ export default async function AdminDashboardPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
+              {recentProperties.length === 0 ? <TableRow><TableCell colSpan={7} className="px-5 py-6">No properties yet.</TableCell></TableRow> : null}
               {recentProperties.map((property) => (
                 <TableRow key={property.id}>
                   <TableCell className="pl-5 align-top font-mono text-xs font-semibold whitespace-nowrap">
@@ -225,7 +220,7 @@ export default async function AdminDashboardPage() {
                   </TableCell>
                   <TableCell className="min-w-56 align-top">
                     <Link
-                      href={`/admin/properties/${property.id}/edit`}
+                      href={`/admin/properties/${encodeURIComponent(property.id)}/edit`}
                       className="font-medium text-foreground transition-colors hover:text-primary"
                     >
                       {property.title}
@@ -248,7 +243,7 @@ export default async function AdminDashboardPage() {
                   </TableCell>
                   <TableCell className="sticky right-0 bg-card pr-5 text-right align-top">
                     <Button asChild variant="ghost" size="sm">
-                      <Link href={`/admin/properties/${property.id}/edit`}>
+                      <Link href={`/admin/properties/${encodeURIComponent(property.id)}/edit`}>
                         Edit
                       </Link>
                     </Button>
@@ -357,11 +352,7 @@ export default async function AdminDashboardPage() {
         </div>
       </section>
 
-      <p className="mt-6 flex items-center gap-2 text-xs text-muted-foreground">
-        <Search aria-hidden="true" className="size-3.5" />
-        Property figures use demo queries. Enquiry figures are read from
-        Supabase and include individually labelled demo rows.
-      </p>
+
     </div>
   );
 }

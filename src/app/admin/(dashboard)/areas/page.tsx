@@ -1,9 +1,8 @@
 import type { Metadata } from "next";
 
 import { AdminPageHeader } from "@/components/admin/admin-page-header";
-import { Notice } from "@/components/common/notice";
 import { requireBroker } from "@/lib/auth/broker";
-import { getAreasWithCounts } from "@/modules/areas/queries";
+import { getBrokerAreasWithCounts } from "@/lib/supabase/queries/broker-area-management";
 
 import { AdminAreasClient } from "./admin-areas-client";
 
@@ -17,7 +16,7 @@ export const instant = false;
 export default async function AdminAreasPage() {
   await requireBroker();
 
-  const areas = getAreasWithCounts();
+  const areas = await getBrokerAreasWithCounts();
 
   return (
     <div>
@@ -25,14 +24,10 @@ export default async function AdminAreasPage() {
         breadcrumbs={[{ label: "Areas" }]}
         eyebrow="Areas"
         title="Area management"
-        description="The neighbourhoods covered by the platform and the demo listings mapped to each one. Area records include a parent city and an active flag."
+        description="The neighbourhoods covered by the platform and the listings mapped to each one. Area records include a parent city and an active flag."
       />
 
-      <Notice className="mt-6">
-        Development preview — area records come from the seeded demo data. Add,
-        edit, and active-state changes affect this browser session only and are
-        never written to a database or published to the public website.
-      </Notice>
+
 
       <AdminAreasClient initialAreas={areas} />
     </div>

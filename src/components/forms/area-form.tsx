@@ -13,6 +13,7 @@ interface AreaFormProps {
   submitLabel?: string;
   onSubmit: (area: Area) => void;
   onCancel: () => void;
+  saving?: boolean;
 }
 
 type FieldErrors = Record<string, string>;
@@ -26,14 +27,14 @@ function slugify(value: string): string {
 }
 
 /**
- * Shared add/edit form for demo area records. Values are validated in the
- * browser and handed to the caller; nothing is written to a database.
+ * Area fields are validated in the browser and again by the server action.
  */
 export function AreaForm({
   area,
   submitLabel = "Save area",
   onSubmit,
   onCancel,
+  saving = false,
 }: AreaFormProps) {
   const prefix = area ? `edit-area-${area.slug}` : "new-area";
   const [name, setName] = useState(area?.name ?? "");
@@ -190,7 +191,7 @@ export function AreaForm({
           <Input
             id={id("parentArea")}
             name="parentArea"
-            defaultValue={area?.parentArea ?? "Chennai"}
+            defaultValue={area ? (area.parentArea ?? "") : "Chennai"}
             placeholder="Chennai"
           />
         </FormField>
@@ -258,7 +259,7 @@ export function AreaForm({
             Active area
           </span>
           <span className="mt-0.5 block text-xs leading-relaxed text-muted-foreground">
-            Inactive areas remain in the demo list but are hidden from public
+            Inactive areas remain in the admin list but are hidden from public
             area navigation.
           </span>
         </span>
@@ -268,7 +269,7 @@ export function AreaForm({
         <Button type="button" variant="outline" onClick={onCancel}>
           Cancel
         </Button>
-        <Button type="submit">{submitLabel}</Button>
+        <Button type="submit" disabled={saving}>{saving ? "Saving…" : submitLabel}</Button>
       </div>
     </form>
   );

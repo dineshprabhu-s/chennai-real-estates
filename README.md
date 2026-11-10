@@ -15,12 +15,12 @@ The application source and checked-in migrations are the source of truth. The gu
 - Property details include public listing information, related properties and an enquiry form. General enquiries are available from the contact page; a property enquiry carries an explicit property ID.
 - Enquiries go through a validated Server Action and the `submit_public_lead` database function, which creates a lead and initial activity together. Anonymous users do not receive direct lead-table access.
 - Broker login and admin pages use Supabase Auth, verified broker claims and row-level security. Broker property create, edit and availability updates, and lead status updates and notes, are connected to Supabase.
-- The admin dashboard's property statistics and recent properties, and the admin Areas screen, still use demo data. Demo enquiries in the broker inbox are labeled and read-only through the application.
+- The admin dashboard shows database property counts and recent listings. Brokers can add, edit and activate or deactivate areas. Demo enquiries remain labeled and read-only through the application.
 
 ## Current limitations
 
 - Property illustrations and selected image previews are not uploaded property photographs. Storage and image uploads are not implemented.
-- Public catalogue filtering has no application pagination; the broker inbox displays a bounded recent window. Backend response limits can affect large catalogues.
+- Seeded sample properties are ordinary database records with no demo marker and are included in property counts. Public catalogue filtering has no application pagination; the broker inbox displays a bounded recent window. Backend response limits can affect large catalogues.
 - Contact details in the site configuration are placeholders. WhatsApp links appear only when configured.
 - The enquiry honeypot and one-minute duplicate guard are not comprehensive abuse protection. The anonymous enquiry function is directly callable; production abuse controls still need a design and verification.
 - JavaScript-disabled enquiry behavior, deployment settings, monitoring, backups, privacy and retention procedures require verification. A streamed missing-detail page may show the not-found UI with HTTP 200.
@@ -61,7 +61,7 @@ The Supabase settings are validated lazily by `src/lib/env.ts`. Restart the dev 
 | `/areas` and `/areas/[slug]` | `/admin/properties` — property management |
 | `/contact` — general or property-context enquiry | `/admin/properties/new` and `/admin/properties/[id]/edit` |
 | | `/admin/leads` — enquiry inbox |
-| | `/admin/areas` — demo area preview |
+| | `/admin/areas` — area management |
 
 `/admin` redirects to the dashboard. Admin pages and actions enforce broker authorization in addition to the route proxy.
 
@@ -78,6 +78,7 @@ npm run start
 `npm run start` serves an existing production build. Focused tests are run directly with Node; for example:
 
 ```powershell
+node tests/broker-dashboard-areas.test.cjs
 node tests/public-lead-action.test.cjs
 node tests/public-lead-rpc.test.cjs
 node tests/contact-prehydration.test.cjs

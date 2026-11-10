@@ -130,19 +130,21 @@ The website collects the enquiry; the broker and customer arrange any visit sepa
 
 The admin area is for authorized broker accounts. It is separate from the public website and provides property and enquiry management. Its navigation includes **Dashboard**, **Properties**, **Add Property**, **Leads / Enquiries** and **Areas**.
 
-The dashboard currently mixes live enquiry information and sample property information:
+The dashboard shows saved property records and enquiry information:
 
 | Dashboard card | What it counts |
 |---|---|
-| **Total properties** | Sample property records, including drafts; not live inventory. |
-| **Available** | Sample properties marked available. |
-| **Under negotiation** | Sample properties marked under offer. |
-| **Closed** | Sample properties marked sold/closed. |
+| **Total properties** | All saved property records, including drafts. |
+| **Available** | Properties marked available. |
+| **Under negotiation** | Properties marked under offer. |
+| **Closed** | Properties marked sold/closed. |
 | **New enquiries** | Enquiries marked New, including labeled demo enquiries. |
 | **Pending enquiries** | Enquiries marked New, Contacted or Visit scheduled; it is not a count of every possible open status. |
 | **Scheduled visits** | Enquiries marked Visit scheduled; this is not an automatic booking calendar. |
 
-Recent enquiries are read from the broker inbox; sample enquiries are labeled. Recent property cards and property figures are still sample data. The **Areas** admin page is also a preview: changes there are not saved or published.
+Recent properties show up to five listings ordered by their last updated date. Select a property title or **Edit** to open it, or choose **View all**. If there are no properties, the list says so. Recent enquiries include labeled sample enquiries. Sample properties stored in the catalogue are included in property counts. If data cannot load, the admin page displays an error with a retry option.
+
+Open **Areas** to search the saved localities and see total and public listing counts. Choose **Add Area** to enter a name, URL slug, PIN code, summary, description and optional highlights and parent area. Use **Edit** to change an area, or mark it active or inactive using its status control. Inactive areas are hidden from public area navigation. Read the save feedback; an error means the change was not saved, while a refresh warning means it was saved but some pages may need refreshing. There is no area delete control. If no areas appear, clear the search or add an area. Changing an area URL also changes its public link; update any external links.
 
 ### 10. Logging in and out
 
@@ -270,7 +272,7 @@ Notes are visible in the broker workspace, not public property pages. The curren
 
 This is a suggested working routine, not an automatic workflow:
 
-1. Sign in and review the dashboard, remembering that property figures are sample data.
+1. Sign in and review the dashboard and recent property records.
 2. Open **Leads / Enquiries** and check New enquiries, ignoring labeled demo records.
 3. Contact each customer using the information provided.
 4. Update the lead status and add a concise internal note after the conversation.
@@ -317,7 +319,7 @@ flowchart TD
 
 - An enquiry does not reserve a property or book a visit. Availability, prices, negotiability, approval and missing details require broker confirmation.
 - Property images are illustrations; files selected in the broker form are previews and are not uploaded.
-- Broker area management and dashboard property figures are sample features. The broker property list and enquiry inbox are the relevant management screens for saved records.
+- Property counts include any sample properties stored in the catalogue; confirm which records are real before relying on the figures.
 - Demo enquiries are labeled and read-only. Do not treat them as real customer requests.
 - Contact details must be configured correctly before customers can rely on the phone, email or optional WhatsApp links.
 - The site does not offer a customer appointment calendar, saved-property account, automatic notifications or a property-delete control in the described workflows.
@@ -340,9 +342,9 @@ flowchart TD
 | Cannot log in | Check your email and password. If the account is denied broker access or sign-in remains unavailable, contact the technical administrator. |
 | Session expires | Sign in again; do not share credentials. |
 | Property save fails | Read field messages, check required details and verification/approval combinations, and retry. Do not assume a failed save succeeded. |
-| Property appears missing | Clear filters, check the actual Properties list and status, and reload if needed. Dashboard property figures are sample data. |
+| Property appears missing | Clear filters, check the actual Properties list and status, and reload if needed. Dashboard counts include all saved records, including drafts and any sample records. |
 | Lead list seems empty | Clear filters and check whether the expected record is older than the visible recent window. Contact the technical administrator if live data cannot load. |
 | Status or note does not save | Wait for feedback, check whether the record is labeled Demo, then refresh or retry as directed. If a warning says the change saved but activity logging failed, do not repeat blindly; check the record and contact the administrator. |
-| Area edit disappears | The Areas admin screen is a preview; its changes are not saved. |
+| Area change does not appear | Check the save message, refresh the page and retry if the save failed. If a refresh warning appears, the change was saved; check before repeating it. |
 
 This guide uses diagrams instead of screenshots so it does not include customer information or credentials.

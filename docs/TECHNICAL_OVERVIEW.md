@@ -10,7 +10,7 @@ This is a single-broker property platform centered on Madipakkam and nearby Chen
 
 A **listing** advertises a property; **resale** means an existing property being sold, rather than a separate database transaction type. **Lease** is one of sale/rent/lease; exact financial terms require broker confirmation. **Brokerage** is the broker's fee, represented as independent free text and optional structured terms. A **lead** or **enquiry** is a potential customer request; a **site visit** is an offline event. Availability status, legal approval, and broker verification are separate concepts (§6).
 
-Public catalogue and enquiries, broker authentication, property management, and lead management use Supabase. Admin area management and dashboard property figures remain demo-backed. Image uploads, automated notifications, comprehensive bot protection, and verified production operations are not established here.
+Public catalogue and enquiries, broker authentication, dashboard, property management, area management, and lead management use Supabase. Image uploads, automated notifications, comprehensive bot protection, and verified production operations are not established here.
 
 ## 2. Technology stack
 
@@ -89,12 +89,12 @@ Public routes depend on anonymous queries and shared presentation; broker routes
 | `/contact` | Public enquiry | `ContactForm`, optional explicit property context |
 | `/admin` | Admin redirect | Redirects to dashboard, subject to proxy |
 | `/admin/login` | Public login | `LoginForm`, `loginAction`, Supabase Auth |
-| `/admin/dashboard` | Broker overview | Supabase lead stats/recent leads; demo property figures |
+| `/admin/dashboard` | Broker overview | Supabase property and lead stats and recent records |
 | `/admin/properties` | Broker listing | `AdminPropertiesClient`, broker property/area reads |
 | `/admin/properties/new` | Broker create | `PropertyForm`, broker areas, create action |
 | `/admin/properties/[id]/edit` | Broker edit | Broker reads, `PropertyForm`, update action |
 | `/admin/leads` | Broker inbox | `AdminLeadsClient`, lead/property option reads, guarded actions |
-| `/admin/areas` | Broker area preview | `AdminAreasClient`, demo-only local changes |
+| `/admin/areas` | Broker area management | `AdminAreasClient`, guarded area reads and actions |
 
 Pages are Server Components by default; forms, controls, dialogs and responsive menus use Client Components. Public and admin layouts provide separate shells; root/group `loading.tsx`, `error.tsx`, and root `not-found.tsx` provide boundaries. Public detail pages resolve slugs via anonymous queries and call `notFound()` for missing or unavailable records; database errors throw. Metadata uses public title/summary. A loading boundary can stream before `notFound()`, so the not-found UI can be returned with HTTP 200; verify actual HTTP behavior before relying on it for SEO. The dashboard layout obtains identity for its shell; it is not an independent authorization boundary. Protected pages, broker DAL functions and actions apply broker guards in addition to the proxy.
 
@@ -321,7 +321,9 @@ The server-rendered form specifies fixed `POST /contact`, disables its button un
 
 ### Dashboard and areas
 
-`/admin/dashboard` uses `getBrokerLeadStats`, `getRecentBrokerLeads` and `getBrokerPropertyOptions`; property stats/recent listings remain demo-based. `/admin/areas` uses demo records and browser state only. Its edits and counts are not live database changes.
+`/admin/dashboard` uses `getBrokerPropertyStats` for exact head-only counts of all, available, under-offer and sold properties, and `getRecentBrokerProperties` for up to five records ordered by `updated_at` descending then ID ascending. The date has day precision, so ID breaks same-day ties. The dashboard also uses `getBrokerLeadStats`, `getRecentBrokerLeads` and `getBrokerPropertyOptions`. Seeded sample properties have no demo marker and are included in counts. Errors propagate to the admin error boundary.
+
+`/admin/areas` calls `getBrokerAreasWithCounts`, which reads explicit area columns in stable pages and obtains exact all-status and public-status counts per area. `saveBrokerArea` and `setBrokerAreaActive` validate server input, call `requireBroker()`, use the request-bound client and rely on broker RLS. The database unique constraint rejects duplicate slugs; slug changes cascade through the existing property foreign key. Actions revalidate affected public and admin paths and report refresh warnings. No area delete control exists. Public area access remains subject to existing RLS. No migration is added; applied environment state still needs verification.
 
 ### Properties
 
@@ -372,6 +374,7 @@ No Jest, Vitest, Playwright or Cypress framework is configured. `.cjs` tests use
 
 | Area | Test files | Command / coverage |
 |---|---|---|
+| Dashboard and areas | `tests/broker-dashboard-areas.test.cjs` | `node tests/broker-dashboard-areas.test.cjs`; mock reads, counts, ordering, authorization and writes |
 | Public action / validation | `tests/public-lead-action.test.cjs` | `node tests/public-lead-action.test.cjs` |
 | RPC static checks | `tests/public-lead-rpc.test.cjs` | `node tests/public-lead-rpc.test.cjs`; no SQL execution |
 | Prehydration render | `tests/contact-prehydration.test.cjs` | `node tests/contact-prehydration.test.cjs` |
@@ -446,11 +449,13 @@ Calling the repository a modular monolith is an inference from its single Next a
 
 ## 23. Known limitations and technical debt
 
-**Functional:** admin area edits and dashboard property stats are demo-backed; gallery images are illustrations; uploads are absent; public catalogue has no application pagination; broker inbox is windowed; contact configuration is placeholder.
+**Functional:** sample property rows are included in database counts; gallery images are illustrations; uploads are absent; public catalogue has no application pagination; broker inbox is windowed; contact configuration is placeholder.
 
 **Security:** the honeypot and one-minute duplicate guard are not comprehensive rate limiting; direct anonymous RPC calls bypass the website honeypot. There is no implemented CAPTCHA or trusted per-IP protection. Duplicate responses can reveal limited recent-submission information. Verify JavaScript-disabled form and streamed HTTP status behavior.
 
 **Operations:** deployment, migration state, backup/restore, monitoring, privacy notice, consent and retention are unverified. **Future enhancements:** image management, notifications, scalable search and broader browser/database automation need explicit design.
+
+Documentation maintenance: for changes to architecture, features, workflows, routes, schema, security, integrations, validation, setup, tests, deployment, or limitations, review and update README.md and both guides in the same task as appropriate.
 
 ## 24. New engineer onboarding checklist
 

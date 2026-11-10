@@ -58,7 +58,7 @@ export async function updateBrokerPropertyStatus(id: unknown, status: unknown): 
 
 function refreshPaths(id: string, slug: string, area: string, previous?: { slug: string; area: string }): boolean {
   const paths = new Set([
-    "/", "/properties", "/areas", "/admin/properties",
+    "/", "/properties", "/areas", "/admin/properties", "/admin/dashboard", "/admin/areas",
     `/admin/properties/${encodeURIComponent(id)}/edit`,
     `/properties/${encodeURIComponent(slug)}`, `/areas/${encodeURIComponent(area)}`,
   ]);

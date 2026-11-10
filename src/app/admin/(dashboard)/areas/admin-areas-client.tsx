@@ -2,12 +2,14 @@
 
 import { MapPin, Pencil, Plus, Power, Search } from "lucide-react";
 import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import { saveBrokerArea, setBrokerAreaActive } from "./actions";
 
 import {
   AdminDataTable,
   type AdminTableColumn,
 } from "@/components/admin/data-table";
-import { DemoFeedback } from "@/components/admin/demo-feedback";
+import { ActionFeedback } from "@/components/admin/action-feedback";
 import { AdminModal } from "@/components/admin/modal";
 import { StatCard } from "@/components/admin/stat-card";
 import { EmptyState } from "@/components/common/empty-state";
@@ -24,7 +26,9 @@ interface AdminAreasClientProps {
 }
 
 export function AdminAreasClient({ initialAreas }: AdminAreasClientProps) {
-  const [areas, setAreas] = useState(initialAreas);
+  const areas = initialAreas;
+  const router = useRouter();
+  const [saving, setSaving] = useState(false);
   const [query, setQuery] = useState("");
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<AreaWithCounts | null>(null);
@@ -69,58 +73,26 @@ export function AdminAreasClient({ initialAreas }: AdminAreasClientProps) {
     setFormError(null);
   }
 
-  function handleSubmit(values: Area) {
-    const duplicate = areas.some(
-      (area) => area.slug === values.slug && area.slug !== editing?.slug,
-    );
-
-    if (duplicate) {
-      setFormError(
-        `The slug "${values.slug}" already belongs to another demo area. Choose a different slug.`,
-      );
-      return;
-    }
-
-    if (editing) {
-      setAreas((current) =>
-        current.map((area) =>
-          area.slug === editing.slug
-            ? {
-                ...area,
-                ...values,
-                propertyCount: area.propertyCount,
-                publicPropertyCount: area.publicPropertyCount,
-              }
-            : area,
-        ),
-      );
-      setFeedback(
-        `${values.name} was updated in this browser preview only. The public area pages and database are unchanged.`,
-      );
-    } else {
-      setAreas((current) => [
-        ...current,
-        { ...values, propertyCount: 0, publicPropertyCount: 0 },
-      ]);
-      setFeedback(
-        `${values.name} was added to this browser preview only. No area record was stored, and it does not appear on public pages.`,
-      );
-    }
-
-    closeForm();
+  async function handleSubmit(values: Area) {
+    if (saving) return;
+    setSaving(true); setFormError(null);
+    try {
+      const result = await saveBrokerArea(values, editing?.slug ?? null);
+      if (!result.ok) { setFormError(result.message); return; }
+      closeForm(); setFeedback(result.message); router.refresh();
+    } catch { setFormError("Unable to save the area. Please try again."); }
+    finally { setSaving(false); }
   }
 
-  function toggleActive(area: AreaWithCounts) {
-    const nextActive = area.isActive === false;
-
-    setAreas((current) =>
-      current.map((row) =>
-        row.slug === area.slug ? { ...row, isActive: nextActive } : row,
-      ),
-    );
-    setFeedback(
-      `${area.name} is marked ${nextActive ? "active" : "inactive"} in this browser preview only. No data was saved.`,
-    );
+  async function toggleActive(area: AreaWithCounts) {
+    if (saving) return;
+    setSaving(true);
+    try {
+      const result = await setBrokerAreaActive(area.slug, area.isActive === false);
+      setFeedback(result.message);
+      if (result.ok) router.refresh();
+    } catch { setFeedback("Unable to update the area. Please try again."); }
+    finally { setSaving(false); }
   }
 
   const columns: Array<AdminTableColumn<AreaWithCounts>> = [
@@ -142,7 +114,7 @@ export function AdminAreasClient({ initialAreas }: AdminAreasClientProps) {
       id: "parent",
       header: "Parent area",
       className: "align-top text-muted-foreground",
-      cell: (area) => area.parentArea ?? "Chennai",
+      cell: (area) => area.parentArea ?? "Not specified",
     },
     {
       id: "pincode",
@@ -197,12 +169,13 @@ export function AdminAreasClient({ initialAreas }: AdminAreasClientProps) {
             type="button"
             variant="ghost"
             size="icon-sm"
+            disabled={saving}
             onClick={() => toggleActive(area)}
-            aria-label={`${area.isActive === false ? "Activate" : "Deactivate"} ${area.name} (demo)`}
+            aria-label={`${area.isActive === false ? "Activate" : "Deactivate"} ${area.name}`}
             title={
               area.isActive === false
-                ? "Mark active (demo)"
-                : "Mark inactive (demo)"
+                ? "Mark active"
+                : "Mark inactive"
             }
           >
             <Power aria-hidden="true" />
@@ -218,19 +191,19 @@ export function AdminAreasClient({ initialAreas }: AdminAreasClientProps) {
         <StatCard
           label="Total areas"
           value={areas.length}
-          description="Demo localities available in the workspace."
+          description="Localities in the workspace."
           icon={MapPin}
         />
         <StatCard
           label="Active areas"
           value={activeAreas}
-          description="Shown as active in this preview."
+          description="Available in public area navigation."
           icon={MapPin}
         />
         <StatCard
           label="Mapped listings"
           value={mappedProperties}
-          description="Property records across every demo area."
+          description="Property records across all areas."
           icon={MapPin}
         />
       </div>
@@ -254,7 +227,7 @@ export function AdminAreasClient({ initialAreas }: AdminAreasClientProps) {
               className="pl-9"
             />
           </div>
-          <Button type="button" onClick={openCreate}>
+          <Button type="button" disabled={saving} onClick={openCreate}>
             <Plus aria-hidden="true" />
             Add Area
           </Button>
@@ -262,19 +235,18 @@ export function AdminAreasClient({ initialAreas }: AdminAreasClientProps) {
 
         <p className="text-xs text-muted-foreground">
           Showing {filtered.length} of {areas.length}{" "}
-          {areas.length === 1 ? "area" : "areas"} · Add and edit actions are
-          demo-only
+          {areas.length === 1 ? "area" : "areas"}
         </p>
       </div>
 
-      <DemoFeedback message={feedback} className="mt-4" />
+      <ActionFeedback message={feedback} className="mt-4" />
 
       {filtered.length === 0 ? (
         <EmptyState
           className="mt-4"
           icon={MapPin}
-          title="No areas match this search"
-          description="Try a different locality name, slug, or PIN code."
+          title={areas.length === 0 ? "No areas yet" : "No areas match this search"}
+          description={areas.length === 0 ? "Add an area to get started." : "Try a different locality name, slug, or PIN code."}
           action={
             <Button type="button" variant="outline" onClick={() => setQuery("")}>
               Clear search
@@ -295,7 +267,7 @@ export function AdminAreasClient({ initialAreas }: AdminAreasClientProps) {
                       {area.slug} · {area.pincode}
                     </p>
                     <p className="mt-1 text-xs text-muted-foreground">
-                      {area.parentArea ?? "Chennai"}
+                      {area.parentArea ?? "Not specified"}
                     </p>
                   </div>
                   <Badge
@@ -325,7 +297,8 @@ export function AdminAreasClient({ initialAreas }: AdminAreasClientProps) {
                     type="button"
                     variant="ghost"
                     size="sm"
-                    onClick={() => toggleActive(area)}
+                    disabled={saving}
+            onClick={() => toggleActive(area)}
                   >
                     <Power aria-hidden="true" />
                     {area.isActive === false ? "Mark active" : "Mark inactive"}
@@ -352,8 +325,8 @@ export function AdminAreasClient({ initialAreas }: AdminAreasClientProps) {
         title={editing ? `Edit ${editing.name}` : "Add an area"}
         description={
           editing
-            ? "Update the demo area details. Changes stay in this browser session."
-            : "Create a demo area record. Nothing is saved or published publicly."
+            ? "Update the area details. Changes affect the public website."
+            : "Create an area record for the catalogue."
         }
       >
         {formError ? (
@@ -367,16 +340,14 @@ export function AdminAreasClient({ initialAreas }: AdminAreasClientProps) {
         <AreaForm
           key={editing?.slug ?? "new-area"}
           area={editing ?? undefined}
-          submitLabel={editing ? "Save changes (demo)" : "Add area (demo)"}
+          submitLabel={editing ? "Save changes" : "Add area"}
           onSubmit={handleSubmit}
           onCancel={closeForm}
+          saving={saving}
         />
       </AdminModal>
 
-      <p className="mt-4 text-xs leading-relaxed text-muted-foreground">
-        Area records are seeded demo data. Adding, editing, or deactivating an
-        area does not change the public website, and no database write occurs.
-      </p>
+
     </div>
   );
 }
