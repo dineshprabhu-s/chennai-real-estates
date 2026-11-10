@@ -144,6 +144,12 @@ The dashboard shows saved property records and enquiry information:
 
 Recent properties show up to five listings ordered by their last updated date. Select a property title or **Edit** to open it, or choose **View all**. If there are no properties, the list says so. Recent enquiries include labeled sample enquiries. Sample properties stored in the catalogue are included in property counts. If data cannot load, the admin page displays an error with a retry option.
 
+### Enquiry notifications
+
+The bell in the admin header shows a badge when there are unread enquiry notifications. Select it to open the notification panel. New general and property enquiries appear there while you work; the panel refreshes periodically while the tab is visible. Select **Open enquiry** to mark an unread notification as read and open its lead. You can instead choose **Mark as read** on one item or **Mark all as read** for all unread items. Opening the panel alone does not mark anything read. Read status is shared between broker accounts and remains saved when you return.
+
+If the panel says you are all caught up, there are no recent notifications. If it cannot load or save, follow the error message and retry. Notifications are in-app only: no email, WhatsApp, SMS or push alert is sent.
+
 Open **Areas** to search the saved localities and see total and public listing counts. Choose **Add Area** to enter a name, URL slug, PIN code, summary, description and optional highlights and parent area. Use **Edit** to change an area, or mark it active or inactive using its status control. Inactive areas are hidden from public area navigation. Read the save feedback; an error means the change was not saved, while a refresh warning means it was saved but some pages may need refreshing. There is no area delete control. If no areas appear, clear the search or add an area. Changing an area URL also changes its public link; update any external links.
 
 ### 10. Logging in and out
@@ -322,7 +328,7 @@ flowchart TD
 - Property counts include any sample properties stored in the catalogue; confirm which records are real before relying on the figures.
 - Demo enquiries are labeled and read-only. Do not treat them as real customer requests.
 - Contact details must be configured correctly before customers can rely on the phone, email or optional WhatsApp links.
-- The site does not offer a customer appointment calendar, saved-property account, automatic notifications or a property-delete control in the described workflows.
+- The site does not offer a customer appointment calendar, saved-property account, external notification alerts or a property-delete control in the described workflows.
 
 ### 21. Troubleshooting for customers
 

@@ -10,7 +10,7 @@ This is a single-broker property platform centered on Madipakkam and nearby Chen
 
 A **listing** advertises a property; **resale** means an existing property being sold, rather than a separate database transaction type. **Lease** is one of sale/rent/lease; exact financial terms require broker confirmation. **Brokerage** is the broker's fee, represented as independent free text and optional structured terms. A **lead** or **enquiry** is a potential customer request; a **site visit** is an offline event. Availability status, legal approval, and broker verification are separate concepts (§6).
 
-Public catalogue and enquiries, broker authentication, dashboard, property management, area management, and lead management use Supabase. Image uploads, automated notifications, comprehensive bot protection, and verified production operations are not established here.
+Public catalogue and enquiries, broker authentication, dashboard, property management, area management, and lead management use Supabase. Image uploads, external messaging, comprehensive bot protection, and verified production operations are not established here. Persistent in-app broker notifications are defined by a forward migration.
 
 ## 2. Technology stack
 
@@ -51,7 +51,7 @@ flowchart LR
   RPC --> DB
 ```
 
-The public client is server-only and independent of visitor cookies. Broker reads/actions use the request-bound client plus `requireBroker()` and database RLS. The public form validates in the browser and Server Action; the anonymous RPC validates again and atomically creates a lead and initial activity. Client components manage interactions and receive only data intentionally passed to them; the authorized broker form receives private fields it needs.
+The public client is server-only and independent of visitor cookies. Broker reads/actions use the request-bound client plus `requireBroker()` and database RLS. The public form validates in the browser and Server Action; the anonymous RPC validates again and atomically creates a lead, initial activity and broker notification once the notification migration is applied. Client components manage interactions and receive only data intentionally passed to them; the authorized broker form receives private fields it needs.
 
 ## 4. Repository and folder structure
 
@@ -108,6 +108,7 @@ erDiagram
   PROPERTIES o|--o{ LEADS : property_id
   LEADS ||--o{ LEAD_NOTES : lead_id
   LEADS ||--o{ LEAD_ACTIVITIES : lead_id
+  LEADS o|--o| BROKER_NOTIFICATIONS : lead_id
 ```
 
 ### Areas
@@ -250,7 +251,7 @@ sequenceDiagram
 
 ## 9. Database security and row-level security
 
-All five tables have RLS. `public.is_broker()` is security-invoker, has an empty search path, and checks JWT `app_metadata.role`; authenticated users may execute it. Grants permit operations, policies restrict rows.
+The five original tables and the new broker notification table have RLS. `public.is_broker()` is security-invoker, has an empty search path, and checks JWT `app_metadata.role`; authenticated users may execute it. Grants permit operations, policies restrict rows.
 
 | Resource | Anonymous | Authenticated non-broker | Authenticated broker |
 |---|---|---|---|
@@ -258,6 +259,7 @@ All five tables have RLS. `public.is_broker()` is security-invoker, has an empty
 | Properties read | `available` / `under-offer`, public columns only | No matching policy | All columns/statuses |
 | Area/property writes | None | No matching policy | CRUD under broker policies |
 | Lead/note/activity tables | No direct access | No matching policy | CRUD under broker policies |
+| Broker notifications | No direct access | No matching policy | Read and update read timestamp only |
 | `submit_public_lead` | Execute | No execute grant | No authenticated execute grant; public client remains anon |
 
 Authenticated table CRUD grants are constrained by broker policies with `USING` and `WITH CHECK`. Anonymous has no direct lead-table/sequence grants. Authenticated receives usage on property, lead and note sequences. The RPC is owned by `postgres`, `SECURITY DEFINER`, `RETURNS void`, has empty `search_path` and explicit execute grants/revokes.
@@ -315,7 +317,7 @@ sequenceDiagram
 
 The server-rendered form specifies fixed `POST /contact`, disables its button until hydration and explains the JavaScript requirement. Hydrated submission prevents default, validates, focuses the first invalid field, prevents concurrent clicks with a ref and pending state, and calls the action. Verify the actual no-JavaScript and implicit-Enter behavior before launch.
 
-`public.submit_public_lead(p_name text, p_phone text, p_email text, p_message text, p_property_id text default null) returns void` is defined by the two later migrations. It derives source, `status='new'`, `is_demo=false`, IDs and timestamps. Invalid input uses `22023`; missing/nonpublic property uses `P0001`; a same-phone/same-property enquiry within 60 seconds uses `P0002`. An advisory transaction lock serializes that pair, and lead and initial activity inserts are atomic. The action returns safe serializable feedback, not IDs or raw errors. The website honeypot is not enforced for direct anonymous RPC calls. No durable per-phone/IP limit, CAPTCHA or configured WAF is implemented; direct invocation and rotating numbers remain risks.
+`public.submit_public_lead(p_name text, p_phone text, p_email text, p_message text, p_property_id text default null) returns void` is defined and subsequently replaced by the public-lead and broker-notification migrations. It derives source, `status='new'`, `is_demo=false`, IDs and timestamps. Invalid input uses `22023`; missing/nonpublic property uses `P0001`; a same-phone/same-property enquiry within 60 seconds uses `P0002`. An advisory transaction lock serializes that pair, and lead, initial activity and notification inserts are atomic after the notification migration. The action returns safe serializable feedback, not IDs or raw errors. The website honeypot is not enforced for direct anonymous RPC calls. No durable per-phone/IP limit, CAPTCHA or configured WAF is implemented; direct invocation and rotating numbers remain risks.
 
 ## 12. Broker administration workflows
 
@@ -330,6 +332,12 @@ The server-rendered form specifies fixed `POST /contact`, disables its button un
 `getBrokerProperties`, `getBrokerPropertyById`, and `getBrokerAreas` use the request-bound client and guards. Broker area options include inactive areas to retain existing relations. List filters and search use current server props. Create/edit uses `adaptPropertyForm`, `validateBrokerPropertyInput`, and `mapBrokerPropertyCreate`/`mapBrokerPropertyUpdate`; a slug is generated and checked, while PostgreSQL generates the property ID. Partial updates preserve hidden fields, ID, slug, independent descriptions and unchanged free-form brokerage. `publish` sets `available`, `draft` sets `draft`, and `preserve` retains status. `updateBrokerPropertyStatus` supports all six statuses with confirmation for nonpublic targets; it does not alter approval.
 
 Property actions revalidate the admin list/edit, home, catalogue, area list, property/area details and previous slug/area where applicable. Post-write invalidation failure returns a warning. Image selections are previews only.
+
+### Broker notifications
+
+`broker_notifications` stores a UUID, nullable lead foreign key, type, creation time and nullable read time. Deleting an associated lead leaves a notification without a lead; no customer contact details are stored in the notification row. An index supports recent ordering and a partial index supports unread counts. Broker RLS permits select and update; column grants allow authenticated users to update only `read_at`, with RLS restricting rows to brokers. Anonymous users have no table access. The security-definer `submit_public_lead` inserts the notification after lead and initial activity in the same transaction; failure rolls back all three. Existing and demo leads are not backfilled. The RPC signature, owner, empty search path, validation, duplicate guard and anon-only execute grant remain unchanged.
+
+`getBrokerNotifications` uses the request-bound client and broker guard, selecting 20 recent records ordered by creation time and UUID descending plus an exact unread count. It joins only the lead name and property reference, not phone, email or message. `loadBrokerNotifications`, `markBrokerNotificationRead` and `markAllBrokerNotificationsRead` independently require a broker; write actions update only `read_at`. `NotificationBell` displays a drawer and polls the guarded load action every 30 seconds while the tab is visible, refreshes when the tab becomes visible or the drawer opens, and cleans up its timer on unmount. Read state is shared among all broker accounts. Poll failures display an error instead of a fabricated count; clicking an unread item confirms the update before navigating to `/admin/leads?lead=...`. There is no Realtime configuration or external messaging. Migration application, RLS and polling require staging verification.
 
 ### Leads
 
@@ -375,6 +383,7 @@ No Jest, Vitest, Playwright or Cypress framework is configured. `.cjs` tests use
 | Area | Test files | Command / coverage |
 |---|---|---|
 | Dashboard and areas | `tests/broker-dashboard-areas.test.cjs` | `node tests/broker-dashboard-areas.test.cjs`; mock reads, counts, ordering, authorization and writes |
+| Notifications | `tests/broker-notifications.test.cjs`, `tests/sql/broker-notifications.sql` | Mock/static Node checks; SQL script requires disposable database and rolls back |
 | Public action / validation | `tests/public-lead-action.test.cjs` | `node tests/public-lead-action.test.cjs` |
 | RPC static checks | `tests/public-lead-rpc.test.cjs` | `node tests/public-lead-rpc.test.cjs`; no SQL execution |
 | Prehydration render | `tests/contact-prehydration.test.cjs` | `node tests/contact-prehydration.test.cjs` |
@@ -387,7 +396,7 @@ Add action tests with mocked guarded clients and failure cases, then separately 
 
 ## 17. Database migration and seed management
 
-The initial migration creates schema/RLS; `20261109000000_public_lead_submission.sql` adds the RPC; `20261110000000_reject_blank_public_lead_property_id.sql` replaces it to reject blank references. Do not rewrite migrations already applied elsewhere. `supabase/seed.sql` contains four areas, nine sample properties and seven demo leads; it is not a production import strategy.
+The initial migration creates schema/RLS; `20261111000000_broker_notifications.sql` adds the notification table and extends the RPC; `20261109000000_public_lead_submission.sql` adds the RPC; `20261110000000_reject_blank_public_lead_property_id.sql` replaces it to reject blank references. Do not rewrite migrations already applied elsewhere. `supabase/seed.sql` contains four areas, nine sample properties and seven demo leads; it is not a production import strategy. No historical notifications are backfilled.
 
 No `supabase/config.toml` or Supabase CLI package is checked in. Establish CLI and local-stack availability separately. The SQL test includes psql meta-commands and cannot be pasted unchanged into Dashboard SQL Editor. Adapt and review for a disposable environment; rollback test inserts can still consume sequence values. Never run tests against production.
 
@@ -453,7 +462,7 @@ Calling the repository a modular monolith is an inference from its single Next a
 
 **Security:** the honeypot and one-minute duplicate guard are not comprehensive rate limiting; direct anonymous RPC calls bypass the website honeypot. There is no implemented CAPTCHA or trusted per-IP protection. Duplicate responses can reveal limited recent-submission information. Verify JavaScript-disabled form and streamed HTTP status behavior.
 
-**Operations:** deployment, migration state, backup/restore, monitoring, privacy notice, consent and retention are unverified. **Future enhancements:** image management, notifications, scalable search and broader browser/database automation need explicit design.
+**Operations:** deployment, migration state, backup/restore, monitoring, privacy notice, consent and retention are unverified. **Future enhancements:** image management, external alerts, scalable search and broader browser/database automation need explicit design.
 
 Documentation maintenance: for changes to architecture, features, workflows, routes, schema, security, integrations, validation, setup, tests, deployment, or limitations, review and update README.md and both guides in the same task as appropriate.
 
@@ -461,7 +470,7 @@ Documentation maintenance: for changes to architecture, features, workflows, rou
 
 - [ ] Understand the single-broker journey and availability/approval/verification distinctions.
 - [ ] Clone, configure a nonproduction environment and run §18 commands.
-- [ ] Read the architecture and ER diagrams and all three migrations.
+- [ ] Read the architecture and ER diagrams and all four migrations.
 - [ ] Trace anonymous and request-cookie clients, broker claims, grants and RLS.
 - [ ] Trace a public enquiry through the RPC and a broker lead update through its action.
 - [ ] Run the focused tests and arrange browser and disposable database verification.

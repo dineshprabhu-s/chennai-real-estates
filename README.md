@@ -13,7 +13,7 @@ The application source and checked-in migrations are the source of truth. The gu
 
 - Public pages read available and under-offer properties and active areas through a session-independent anonymous Supabase client. Catalogue filters cover locality, transaction, category, configuration, bedrooms, price, facing and keywords.
 - Property details include public listing information, related properties and an enquiry form. General enquiries are available from the contact page; a property enquiry carries an explicit property ID.
-- Enquiries go through a validated Server Action and the `submit_public_lead` database function, which creates a lead and initial activity together. Anonymous users do not receive direct lead-table access.
+- Enquiries go through a validated Server Action and the `submit_public_lead` database function, which creates a lead, initial activity and persistent broker notification together. Anonymous users do not receive direct lead-table access.
 - Broker login and admin pages use Supabase Auth, verified broker claims and row-level security. Broker property create, edit and availability updates, and lead status updates and notes, are connected to Supabase.
 - The admin dashboard shows database property counts and recent listings. Brokers can add, edit and activate or deactivate areas. Demo enquiries remain labeled and read-only through the application.
 
@@ -24,7 +24,7 @@ The application source and checked-in migrations are the source of truth. The gu
 - Contact details in the site configuration are placeholders. WhatsApp links appear only when configured.
 - The enquiry honeypot and one-minute duplicate guard are not comprehensive abuse protection. The anonymous enquiry function is directly callable; production abuse controls still need a design and verification.
 - JavaScript-disabled enquiry behavior, deployment settings, monitoring, backups, privacy and retention procedures require verification. A streamed missing-detail page may show the not-found UI with HTTP 200.
-- No appointment booking or automatic enquiry notification is implemented. Confirm property details, prices and availability with the broker.
+- In-app notifications are shared between broker accounts; email, WhatsApp, SMS and push alerts are not implemented. No appointment booking is implemented. Confirm property details, prices and availability with the broker.
 
 ## Technology
 
@@ -79,6 +79,7 @@ npm run start
 
 ```powershell
 node tests/broker-dashboard-areas.test.cjs
+node tests/broker-notifications.test.cjs
 node tests/public-lead-action.test.cjs
 node tests/public-lead-rpc.test.cjs
 node tests/contact-prehydration.test.cjs
@@ -95,7 +96,7 @@ These harnesses include mocks and static checks; they do not replace browser or 
 
 ## Database and security
 
-The checked-in migrations are in `supabase/migrations/`; `supabase/seed.sql` contains sample data. Do not rewrite an already-applied migration. Confirm the target and migration history before applying a reviewed forward migration, and verify grants and policies in a disposable environment.
+The checked-in migrations, including the broker notification migration, are in `supabase/migrations/`; apply and verify them in a nonproduction environment before relying on notifications. `supabase/seed.sql` contains sample data. Do not rewrite an already-applied migration. Confirm the target and migration history before applying a reviewed forward migration, and verify grants and policies in a disposable environment.
 
 Anonymous property reads exclude the private `description`, `address` and `whatsapp_reference` columns. Broker operations use a request-bound client and server-side role checks. Public enquiries use a separate cookie-free anonymous client and a narrow database function. See the [technical overview](docs/TECHNICAL_OVERVIEW.md) for the full access model, migration notes and known operational gaps.
 

@@ -1,9 +1,10 @@
 "use client";
 
-import { Bell, ChevronRight, ExternalLink } from "lucide-react";
+import { ChevronRight, ExternalLink } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
+import { NotificationBell } from "@/components/layout/notification-bell";
 import { AdminMobileNav } from "@/components/layout/admin-mobile-nav";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -79,21 +80,7 @@ export function AdminHeader({ brokerEmail }: AdminHeaderProps) {
       </div>
 
       <div className="flex items-center gap-2 sm:gap-3">
-        <button
-          type="button"
-          title="Notifications are a development preview"
-          aria-label="Notifications, development preview"
-          className={cn(
-            buttonVariants({ variant: "outline", size: "icon-sm" }),
-            "relative",
-          )}
-        >
-          <Bell aria-hidden="true" className="size-4" />
-          <span
-            aria-hidden="true"
-            className="absolute top-1.5 right-1.5 size-1.5 rounded-full bg-warning"
-          />
-        </button>
+        <NotificationBell key={pathname} />
 
         <Link
           href="/"

@@ -102,6 +102,7 @@ export default async function AdminLeadsPage({
       ) : null}
 
       <AdminLeadsClient
+        key={initialLeadId ?? "inbox"}
         initialLeads={leads}
         properties={properties}
         totalLeads={Math.max(inbox.total, leads.length)}
