@@ -8,7 +8,8 @@ import { Button } from "@/components/ui/button";
 import { requireBroker } from "@/lib/auth/broker";
 import {
   getBrokerLeadById,
-  getBrokerLeads,
+  getBrokerLeadPage,
+  getBrokerLeadStats,
   getBrokerPropertyOptions,
 } from "@/lib/supabase/queries/broker-leads";
 import { leadStatusOptions } from "@/modules/leads/constants";
@@ -44,26 +45,19 @@ export default async function AdminLeadsPage({
   const params = await searchParams;
   const requestedLeadId = firstValue(params.lead);
   const requestedStatus = firstValue(params.status);
-  const [inbox, propertyOptions] = await Promise.all([
-    getBrokerLeads(),
-    getBrokerPropertyOptions(),
-  ]);
-
-  let leads = inbox.leads;
-
-  // `?lead=` may point at a record outside the explicit inbox window. Fetch it
-  // directly so the existing deep link still opens the detail drawer.
-  if (requestedLeadId && !leads.some((lead) => lead.id === requestedLeadId)) {
-    const requestedLead = await getBrokerLeadById(requestedLeadId);
-    if (requestedLead) leads = [requestedLead, ...leads];
-  }
-
-  const initialLeadId = leads.some((lead) => lead.id === requestedLeadId)
-    ? requestedLeadId
-    : undefined;
   const initialStatus = leadStatusOptions.find(
     (option) => option.value === requestedStatus,
   )?.value as LeadStatus | undefined;
+  const [inbox, propertyOptions, stats] = await Promise.all([
+    getBrokerLeadPage({ page: 1, query: "", status: initialStatus ?? "all", source: "all", propertyId: "all" }),
+    getBrokerPropertyOptions(),
+    getBrokerLeadStats(),
+  ]);
+
+  const deepLead = requestedLeadId
+    ? inbox.leads.find((lead) => lead.id === requestedLeadId) ?? await getBrokerLeadById(requestedLeadId)
+    : null;
+  const initialLeadId = deepLead?.id;
   const properties = propertyOptions.map((property) => ({
     id: property.id,
     title: property.title,
@@ -94,18 +88,14 @@ export default async function AdminLeadsPage({
         notes on other records are saved to the broker workspace.
       </Notice>
 
-      {inbox.hasMore ? (
-        <Notice className="mt-4">
-          Showing the most recent {inbox.limit} of {inbox.total} enquiries. Older
-          records are not loaded in this view.
-        </Notice>
-      ) : null}
-
       <AdminLeadsClient
-        key={initialLeadId ?? "inbox"}
-        initialLeads={leads}
+        key={`${initialLeadId ?? "inbox"}:${initialStatus ?? "all"}`}
+        initialLeads={inbox.leads}
+        initialPage={inbox}
+        initialDeepLead={deepLead}
+        stats={stats}
         properties={properties}
-        totalLeads={Math.max(inbox.total, leads.length)}
+        totalLeads={inbox.total}
         initialLeadId={initialLeadId}
         initialStatus={initialStatus}
       />

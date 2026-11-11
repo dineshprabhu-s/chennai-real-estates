@@ -19,7 +19,7 @@ import {
 } from "@/lib/supabase/mappers/broker-lead";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { leadStatusOptions } from "@/modules/leads/constants";
-import type { LeadStatus } from "@/types/lead";
+import type { LeadStatus, LeadSource } from "@/types/lead";
 
 const leadColumns =
   "id,name,phone,email,message,property_id,status,created_at,source,is_demo,updated_at";
@@ -37,7 +37,6 @@ export const BROKER_LEADS_LIMIT = 100;
 
 const childPageSize = 500;
 const propertyPageSize = 500;
-const maxPages = 40;
 
 function requireLeadId(id: string): string {
   if (typeof id !== "string" || !id.trim() || id.trim().length > 64) {
@@ -64,7 +63,7 @@ function groupByLead<Row extends { lead_id: string }>(
 /**
  * Reads every child row for the supplied leads in stable pages. Supabase caps
  * a single response, so a single unbounded select could silently drop notes or
- * activities. Exceeding the explicit window is an error, not a partial read.
+ * activities. Reads continue until the final page, so long histories are not silently truncated.
  */
 async function readLeadChildren<Row extends { lead_id: string }>(
   supabase: SupabaseClient,
@@ -78,7 +77,7 @@ async function readLeadChildren<Row extends { lead_id: string }>(
 
   const rows: Row[] = [];
 
-  for (let page = 0; page < maxPages; page += 1) {
+  for (let page = 0; ; page += 1) {
     const start = page * childPageSize;
     const { data, error } = await supabase
       .from(table)
@@ -97,7 +96,6 @@ async function readLeadChildren<Row extends { lead_id: string }>(
     if (batch.length < childPageSize) return rows;
   }
 
-  throw new Error(`Broker lead ${label} exceeded the safe read window`);
 }
 
 /** Broker inbox list. Customer data must never be cached across requests. */
@@ -152,6 +150,64 @@ export async function getBrokerLeads(): Promise<BrokerLeadInbox> {
     limit: BROKER_LEADS_LIMIT,
     hasMore: count > rows.length,
   };
+}
+
+export interface BrokerLeadPageFilters {
+  page: number;
+  query: string;
+  status: LeadStatus | "all";
+  source: LeadSource | "all";
+  propertyId: string;
+}
+export interface BrokerLeadPage {
+  leads: BrokerLead[];
+  page: number;
+  pageSize: number;
+  matchingTotal: number;
+  total: number;
+}
+export const BROKER_LEAD_PAGE_SIZE = 25;
+
+/** Exact counts and a bounded page are evaluated by PostgREST under broker RLS. */
+export async function getBrokerLeadPage(filters: BrokerLeadPageFilters): Promise<BrokerLeadPage> {
+  await requireBroker();
+  const supabase = await createSupabaseServerClient();
+  const page = Number.isSafeInteger(filters.page) && filters.page > 0 ? filters.page : 1;
+  const offset = (page - 1) * BROKER_LEAD_PAGE_SIZE;
+  if (!Number.isSafeInteger(offset)) throw new Error("Invalid lead page");
+  const keyword = filters.query.trim().slice(0, 100);
+  const statuses = leadStatusOptions.map((option) => option.value);
+  const sources: LeadSource[] = ["website-form", "property-enquiry", "whatsapp", "phone"];
+  if (filters.status !== "all" && !statuses.includes(filters.status)) throw new Error("Invalid lead status");
+  if (filters.source !== "all" && !sources.includes(filters.source)) throw new Error("Invalid lead source");
+  if (typeof filters.propertyId !== "string" || filters.propertyId.length > 64) throw new Error("Invalid property filter");
+  let query = supabase.from("leads").select(keyword ? `${leadColumns},search_property:properties!leads_property_id_fkey()` : leadColumns, { count: "exact" });
+  if (filters.status !== "all") query = query.eq("status", filters.status);
+  if (filters.source !== "all") query = query.eq("source", filters.source);
+  if (filters.propertyId === "general") query = query.is("property_id", null);
+  else if (filters.propertyId !== "all") query = query.eq("property_id", filters.propertyId);
+  if (keyword) {
+    // Quote PostgREST filter operands and escape LIKE metacharacters so user
+    // input cannot alter the filter grammar or turn into wildcard patterns.
+    const literal = keyword.replace(/[\\%_]/g, "\\$&").replace(/"/g, '\\"');
+    const pattern = `"%${literal}%"`;
+    query = query.or(`title.ilike.${pattern},locality.ilike.${pattern}`, { referencedTable: "search_property" });
+    query = query.or([...["id", "name", "phone", "email", "property_id", "message"].map((field) => `${field}.ilike.${pattern}`), "search_property.not.is.null"].join(","));
+  }
+  const [result, totalResult] = await Promise.all([
+    query.order("created_at", { ascending: false }).order("id", { ascending: false }).range(offset, offset + BROKER_LEAD_PAGE_SIZE - 1),
+    supabase.from("leads").select("id", { count: "exact", head: true }),
+  ]);
+  if (result.error || typeof result.count !== "number" || !result.data) throw new Error("Failed to fetch broker lead page");
+  if (totalResult.error || typeof totalResult.count !== "number") throw new Error("Failed to count broker leads");
+  const rows = result.data as unknown as BrokerLeadRow[];
+  const ids = rows.map((row) => row.id);
+  const [notes, activities] = await Promise.all([
+    readLeadChildren<BrokerLeadNoteRow>(supabase, "lead_notes", noteColumns, ids, "created_at", "notes"),
+    readLeadChildren<BrokerLeadActivityRow>(supabase, "lead_activities", activityColumns, ids, "occurred_at", "activities"),
+  ]);
+  const notesByLead = groupByLead(notes), activitiesByLead = groupByLead(activities);
+  return { leads: rows.map((row) => mapBrokerLead(row, notesByLead.get(row.id) ?? [], activitiesByLead.get(row.id) ?? [])), page, pageSize: BROKER_LEAD_PAGE_SIZE, matchingTotal: result.count, total: totalResult.count };
 }
 
 /** One lead with notes and activities. Returns null only for a missing row. */
@@ -274,7 +330,7 @@ export async function getBrokerPropertyOptions(): Promise<
     Pick<BrokerPropertyRow, "id" | "title" | "locality" | "status">
   > = [];
 
-  for (let page = 0; page < maxPages; page += 1) {
+  for (let page = 0; ; page += 1) {
     const start = page * propertyPageSize;
     const { data, error } = await supabase
       .from("properties")
@@ -292,5 +348,4 @@ export async function getBrokerPropertyOptions(): Promise<
     if (batch.length < propertyPageSize) return rows.map(mapBrokerPropertyOption);
   }
 
-  throw new Error("Broker property options exceeded the safe read window");
 }

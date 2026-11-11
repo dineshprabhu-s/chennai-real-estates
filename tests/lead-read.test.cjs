@@ -394,7 +394,7 @@ async function main() {
   assert(source.includes('import "server-only"'));
 
   const leadsPage = fs.readFileSync(path.join(root, 'src/app/admin/(dashboard)/leads/page.tsx'), 'utf8');
-  assert(leadsPage.includes('getBrokerLeads'));
+  assert(leadsPage.includes('getBrokerLeadPage'));
   assert(leadsPage.includes('getBrokerLeadById'));
   assert(leadsPage.includes('getBrokerPropertyOptions'));
   assert(!leadsPage.includes('modules/leads/queries'));

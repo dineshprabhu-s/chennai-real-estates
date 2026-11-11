@@ -1,6 +1,6 @@
 # Chennai Real Estates: technical overview
 
-**Purpose:** engineering onboarding and maintenance reference. **Last verified:** 2026-11-09. **Baseline:** `2ab5949a14fdce5aebaf2766af376cc77ea4c836` on `main`.
+**Purpose:** engineering onboarding and maintenance reference. **Repository review:** 2026-11-11, on `main` at committed checkpoint `c362bdec76a38ce49595219a0cbec6e59c060330` plus the uncommitted lead-history changes. This review does not verify staging or production state.
 
 This documents checked-in source and SQL, not the state of a deployed database. Source code and migrations are authoritative; update this guide when architecture, schema, authorization, security, or major workflows change. The discarded phone-rate-limit experiment is not implemented.
 
@@ -306,7 +306,7 @@ sequenceDiagram
   A->>A: repeat validation
   A->>C: approved RPC arguments
   C->>R: anonymous invocation
-  R->>D: validate, lock, insert lead and activity
+  R->>D: validate, lock, insert lead, activity and notification
   D-->>R: transaction outcome
   R-->>A: void or safe error code
   A-->>F: serializable feedback
@@ -341,7 +341,7 @@ Property actions revalidate the admin list/edit, home, catalogue, area list, pro
 
 ### Leads
 
-`/admin/leads` uses `getBrokerLeads`, `getBrokerPropertyOptions` and optional deep-link lookup. `AdminLeadsClient` provides filtering, detail, status, notes and activity. Seeded demo leads are labeled and guarded actions reject modifications based on the authoritative `is_demo` row. `updateBrokerLeadStatus` conditionally updates the previous status; `addBrokerLeadNote` validates nonblank text. Both attempt activity insertion separately and revalidate `/admin/leads` and `/admin/dashboard`. Broker actions are **not atomic** with their activity insert: a saved change can return an activity warning.
+`/admin/leads` uses `getBrokerLeadPage`, `getBrokerPropertyOptions`, exact status statistics and optional `getBrokerLeadById` deep-link lookup. `AdminLeadsClient` calls the guarded `loadBrokerLeadHistory` Server Action to search and filter the full history with a 350 ms debounce; it fetches 25 rows per page ordered by `created_at` descending and `id` descending. Search matches ID, name, phone, email, message, property ID, and related property title/locality. A PostgREST empty embedded relation supports the related-property search under broker RLS. Status, source and property/general filters combine with search; exact matching and overall counts are obtained separately. Search text is limited to 100 characters and stays in client state and action requests rather than URL query parameters. The history changes are uncommitted at this checkpoint; the PostgREST relationship search and end-to-end pagination have not been verified against staging in this review. The requested notification lead is loaded independently of the current page. Detail, status, notes and activity remain available. Seeded demo leads are labeled and guarded actions reject modifications based on the authoritative `is_demo` row. `updateBrokerLeadStatus` conditionally updates the previous status; `addBrokerLeadNote` validates nonblank text. Both attempt activity insertion separately and revalidate `/admin/leads` and `/admin/dashboard`. Broker actions are **not atomic** with their activity insert: a saved change can return an activity warning.
 
 ```mermaid
 sequenceDiagram
@@ -368,9 +368,9 @@ Public single-record queries return `null` only for missing rows and throw on da
 
 ## 14. State management, caching and performance
 
-React state handles forms, filters, dialogs and pending state; server props remain authoritative for admin data. Actions use `revalidatePath`; lead updates and property status changes also call `router.refresh()`. Property create/edit forms show action feedback and rely on action invalidation and subsequent user navigation rather than calling `router.refresh()` themselves. `next.config.ts` enables Cache Components and partial prefetching. Several request-dependent pages set `instant = false`; auth uses `connection()` to avoid prerendering request-time token checks. Never cache a cookie-bound client or private rows across users.
+React state handles forms, filters, dialogs and pending state. Admin data comes from guarded server reads; the lead inbox stores the latest page returned by a Server Action in client state. Actions use `revalidatePath`; lead updates and property status changes also call `router.refresh()`. Property create/edit forms show action feedback and rely on action invalidation and subsequent user navigation rather than calling `router.refresh()` themselves. `next.config.ts` enables Cache Components and partial prefetching. Several request-dependent pages set `instant = false`; auth uses `connection()` to avoid prerendering request-time token checks. Never cache a cookie-bound client or private rows across users.
 
-Public queries have deterministic ordering but no application pagination and can be affected by backend response caps. Broker inbox is limited to the most recent 100 with an exact total and notice. Child rows and property options use 500-row pages and a 40-page safety ceiling. Filtering the inbox window is not global. Indexes are listed in §6. No Storage or persistent image-upload pipeline is configured; the browser-only preview uses Next Image for selected local files.
+Public queries have deterministic ordering but no application pagination and can be affected by backend response caps. Broker inbox uses 25-row database pages, an exact matching count and an exact overall count; offset pagination can shift between requests when concurrent inserts or updates change ordering. Child rows and property options are fetched in 500-row pages until exhausted; the property selector loads all options and very large note or activity histories can increase page load time. Leading-wildcard text search and exact counts can be expensive on a large dataset; evaluate query plans before adding indexes. Indexes are listed in §6. No Storage or persistent image-upload pipeline is configured; the browser-only preview uses Next Image for selected local files.
 
 ## 15. UI and design system
 
@@ -387,6 +387,7 @@ No Jest, Vitest, Playwright or Cypress framework is configured. `.cjs` tests use
 | Public action / validation | `tests/public-lead-action.test.cjs` | `node tests/public-lead-action.test.cjs` |
 | RPC static checks | `tests/public-lead-rpc.test.cjs` | `node tests/public-lead-rpc.test.cjs`; no SQL execution |
 | Prehydration render | `tests/contact-prehydration.test.cjs` | `node tests/contact-prehydration.test.cjs` |
+| Lead history | `tests/lead-history.test.cjs` | Mocked paging, ordering, counts, filters and authorization; verify PostgREST relationship search in staging |
 | Broker leads | `tests/lead-read.test.cjs`, `tests/lead-actions.test.cjs` | Run each with `node`; mocks and authorization |
 | Broker property | `tests/property-actions.test.cjs`, `tests/property-form-adapter.test.cjs`, `tests/property-brokerage.test.cjs` | Run each with `node` |
 | Property pages/list | `tests/property-pages.test.cjs`, `tests/property-list-refresh.test.cjs` | Run each with `node`; mocked rendering |
@@ -396,7 +397,7 @@ Add action tests with mocked guarded clients and failure cases, then separately 
 
 ## 17. Database migration and seed management
 
-The initial migration creates schema/RLS; `20261111000000_broker_notifications.sql` adds the notification table and extends the RPC; `20261109000000_public_lead_submission.sql` adds the RPC; `20261110000000_reject_blank_public_lead_property_id.sql` replaces it to reject blank references. Do not rewrite migrations already applied elsewhere. `supabase/seed.sql` contains four areas, nine sample properties and seven demo leads; it is not a production import strategy. No historical notifications are backfilled.
+Apply the checked-in migrations in order: `20261107000000_initial_schema.sql` creates the schema and RLS; `20261109000000_public_lead_submission.sql` adds the RPC; `20261110000000_reject_blank_public_lead_property_id.sql` replaces it to reject blank references; `20261111000000_broker_notifications.sql` adds notifications and extends the RPC. Do not rewrite migrations already applied elsewhere. `supabase/seed.sql` contains four areas, nine sample properties and seven demo leads; it is not a production import strategy. No historical notifications are backfilled.
 
 No `supabase/config.toml` or Supabase CLI package is checked in. Establish CLI and local-stack availability separately. The SQL test includes psql meta-commands and cannot be pasted unchanged into Dashboard SQL Editor. Adapt and review for a disposable environment; rollback test inserts can still consume sequence values. Never run tests against production.
 
@@ -458,7 +459,7 @@ Calling the repository a modular monolith is an inference from its single Next a
 
 ## 23. Known limitations and technical debt
 
-**Functional:** sample property rows are included in database counts; gallery images are illustrations; uploads are absent; public catalogue has no application pagination; broker inbox is windowed; contact configuration is placeholder.
+**Functional:** sample property rows are included in database counts; gallery images are illustrations; uploads are absent; public catalogue has no application pagination; broker inbox uses offset pagination; contact configuration is placeholder.
 
 **Security:** the honeypot and one-minute duplicate guard are not comprehensive rate limiting; direct anonymous RPC calls bypass the website honeypot. There is no implemented CAPTCHA or trusted per-IP protection. Duplicate responses can reveal limited recent-submission information. Verify JavaScript-disabled form and streamed HTTP status behavior.
 
@@ -485,7 +486,7 @@ Documentation maintenance: for changes to architecture, features, workflows, rou
 | Supabase clients | `src/lib/supabase/public-server.ts`, `server.ts`, `client.ts`, `proxy.ts` |
 | Broker authorization | `src/lib/auth/broker.ts`, `src/proxy.ts` |
 | Public enquiry action | `src/app/(public)/contact/actions.ts` |
-| Public enquiry RPC | `supabase/migrations/20261109000000_public_lead_submission.sql` and `supabase/migrations/20261110000000_reject_blank_public_lead_property_id.sql` |
+| Public enquiry RPC | `supabase/migrations/20261109000000_public_lead_submission.sql`, `supabase/migrations/20261110000000_reject_blank_public_lead_property_id.sql`, and `supabase/migrations/20261111000000_broker_notifications.sql` |
 | Database schema and RLS | `supabase/migrations/20261107000000_initial_schema.sql` |
 | Queries and mappers | `src/lib/supabase/queries/`, `src/lib/supabase/mappers/` |
 | Validation | `src/lib/validation/public-lead.ts`, `src/lib/supabase/validation/broker-property-input.ts` |

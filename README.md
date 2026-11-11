@@ -7,20 +7,20 @@ A single-broker property catalogue for Madipakkam and nearby Chennai localities.
 - [Technical overview and engineering onboarding](docs/TECHNICAL_OVERVIEW.md) — architecture, schema, security, development and operations.
 - [Website user guide](docs/USER_GUIDE.md) — instructions for property seekers and brokers.
 
-The application source and checked-in migrations are the source of truth. The guides should be reviewed when implementation or deployment configuration changes.
+The application source and checked-in migrations are the source of truth. These documents include the current working-tree implementation; live deployment and staging verification must be established separately.
 
 ## Current functionality
 
 - Public pages read available and under-offer properties and active areas through a session-independent anonymous Supabase client. Catalogue filters cover locality, transaction, category, configuration, bedrooms, price, facing and keywords.
 - Property details include public listing information, related properties and an enquiry form. General enquiries are available from the contact page; a property enquiry carries an explicit property ID.
 - Enquiries go through a validated Server Action and the `submit_public_lead` database function, which creates a lead, initial activity and persistent broker notification together. Anonymous users do not receive direct lead-table access.
-- Broker login and admin pages use Supabase Auth, verified broker claims and row-level security. Broker property create, edit and availability updates, and lead status updates and notes, are connected to Supabase.
+- Broker login and admin pages use Supabase Auth, verified broker claims and row-level security. Broker property create, edit and availability updates, and lead status updates and notes, are connected to Supabase. The inbox searches and filters lead history in database-backed pages of 25, with exact matching and overall counts.
 - The admin dashboard shows database property counts and recent listings. Brokers can add, edit and activate or deactivate areas. Demo enquiries remain labeled and read-only through the application.
 
 ## Current limitations
 
 - Property illustrations and selected image previews are not uploaded property photographs. Storage and image uploads are not implemented.
-- Seeded sample properties are ordinary database records with no demo marker and are included in property counts. Public catalogue filtering has no application pagination; the broker inbox displays a bounded recent window. Backend response limits can affect large catalogues.
+- Seeded sample properties are ordinary database records with no demo marker and are included in property counts. Public catalogue filtering has no application pagination; backend response limits can affect large catalogues. The broker inbox searches full lead history with server-side pagination.
 - Contact details in the site configuration are placeholders. WhatsApp links appear only when configured.
 - The enquiry honeypot and one-minute duplicate guard are not comprehensive abuse protection. The anonymous enquiry function is directly callable; production abuse controls still need a design and verification.
 - JavaScript-disabled enquiry behavior, deployment settings, monitoring, backups, privacy and retention procedures require verification. A streamed missing-detail page may show the not-found UI with HTTP 200.
@@ -83,6 +83,7 @@ node tests/broker-notifications.test.cjs
 node tests/public-lead-action.test.cjs
 node tests/public-lead-rpc.test.cjs
 node tests/contact-prehydration.test.cjs
+node tests/lead-history.test.cjs
 node tests/lead-read.test.cjs
 node tests/lead-actions.test.cjs
 node tests/property-actions.test.cjs
@@ -92,7 +93,7 @@ node tests/property-list-refresh.test.cjs
 node tests/property-pages.test.cjs
 ```
 
-These harnesses include mocks and static checks; they do not replace browser or database integration testing. `tests/sql/public-lead-rpc.sql` is a separate psql verification script for a disposable local or staging database. Review it and the target before running it; do not run test writes against production.
+These harnesses include mocks and static checks; they do not replace browser or database integration testing. `tests/sql/public-lead-rpc.sql` and `tests/sql/broker-notifications.sql` are separate psql verification scripts for a disposable local or staging database. Review each script and target before running it; do not run test writes against production. Lead-history filtering, related-property search and notification polling still require staging verification.
 
 ## Database and security
 

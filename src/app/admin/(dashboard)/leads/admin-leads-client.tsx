@@ -14,9 +14,10 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { addBrokerLeadNote, updateBrokerLeadStatus } from "./actions";
+import { loadBrokerLeadHistory, loadBrokerLeadDetail } from "./history-actions";
 import { LeadStatusBadge } from "@/components/admin/badges";
 import { AdminDataTable, type AdminTableColumn } from "@/components/admin/data-table";
 import { ActionFeedback } from "@/components/admin/action-feedback";
@@ -30,13 +31,14 @@ import { Input } from "@/components/ui/input";
 import { NativeSelect } from "@/components/ui/native-select";
 import { Textarea } from "@/components/ui/textarea";
 import { formatDate } from "@/lib/format";
-import type { BrokerLead } from "@/lib/supabase/broker.types";
+import type { BrokerLead, BrokerLeadStats } from "@/lib/supabase/broker.types";
+import type { BrokerLeadPage } from "@/lib/supabase/queries/broker-leads";
 import {
   leadSourceLabels,
   leadStatusLabels,
   leadStatusOptions,
 } from "@/modules/leads/constants";
-import type { LeadStatus } from "@/types/lead";
+import type { LeadStatus, LeadSource } from "@/types/lead";
 import type { PropertyStatus } from "@/types/property";
 
 interface LeadPropertyOption {
@@ -50,6 +52,9 @@ interface AdminLeadsClientProps {
   initialLeads: BrokerLead[];
   properties: LeadPropertyOption[];
   totalLeads: number;
+  initialPage: BrokerLeadPage;
+  initialDeepLead: BrokerLead | null;
+  stats: BrokerLeadStats;
   initialLeadId?: string;
   initialStatus?: LeadStatus;
 }
@@ -70,92 +75,65 @@ export function AdminLeadsClient({
   initialLeads,
   properties,
   totalLeads,
+  initialPage,
+  initialDeepLead,
+  stats,
   initialLeadId,
   initialStatus,
 }: AdminLeadsClientProps) {
-  // Server props are authoritative: React preserves this component's state
-  // when a revalidated route receives a fresh Server Component payload.
-  const leads = initialLeads;
+  void initialLeads;
+  void totalLeads;
   const router = useRouter();
+  const [data, setData] = useState(initialPage);
   const [query, setQuery] = useState("");
-  const [status, setStatus] = useState<LeadStatus | "all">(
-    initialStatus ?? "all",
-  );
-  const [source, setSource] = useState("all");
+  const [status, setStatus] = useState<LeadStatus | "all">(initialStatus ?? "all");
+  const [source, setSource] = useState<LeadSource | "all">("all");
   const [propertyId, setPropertyId] = useState("all");
-  const [selectedId, setSelectedId] = useState<string | null>(
-    initialLeadId ?? null,
-  );
+  const [page, setPage] = useState(1);
+  const [revision, setRevision] = useState(0);
+  const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(initialLeadId ?? null);
+  const [deepLead, setDeepLead] = useState<BrokerLead | null>(initialDeepLead);
   const [noteDraft, setNoteDraft] = useState("");
   const [feedback, setFeedback] = useState<string | null>(null);
   const [pending, setPending] = useState<"status" | "note" | null>(null);
+  const skipInitial = useRef(true);
+  const leads = data.leads;
+  const selectedLead = (deepLead?.id === selectedId ? deepLead : null) ?? leads.find((lead) => lead.id === selectedId) ?? null;
+  const counts = stats;
+  const filtered = leads;
+  const hasFilters = query.trim().length > 0 || status !== "all" || source !== "all" || propertyId !== "all";
+  const totalPages = Math.max(1, Math.ceil(data.matchingTotal / data.pageSize));
 
-  const selectedLead =
-    leads.find((lead) => lead.id === selectedId) ?? null;
+  useEffect(() => {
+    if (skipInitial.current) { skipInitial.current = false; return; }
+    let cancelled = false;
+    const timer = window.setTimeout(async () => {
+      setLoading(true); setLoadError(null);
+      try {
+        const result = await loadBrokerLeadHistory({ page, query, status, source, propertyId });
+        if (cancelled) return;
+        if (result.ok) setData(result.data); else setLoadError(result.message);
+      } catch { if (!cancelled) setLoadError("Unable to load enquiries. Please try again."); }
+      finally { if (!cancelled) setLoading(false); }
+    }, 350);
+    return () => { cancelled = true; window.clearTimeout(timer); };
+  }, [page, query, status, source, propertyId, revision]);
 
-  const counts = useMemo(() => {
-    const base: Record<LeadStatus, number> = {
-      new: 0,
-      contacted: 0,
-      "visit-scheduled": 0,
-      negotiation: 0,
-      converted: 0,
-      "closed-lost": 0,
-    };
-
-    for (const lead of leads) {
-      base[lead.status] += 1;
-    }
-
-    return base;
-  }, [leads]);
-
-  const normalizedQuery = query.trim().toLowerCase();
-  const filtered = useMemo(
-    () =>
-      leads.filter((lead) => {
-        const property = properties.find(
-          (candidate) => candidate.id === lead.propertyId,
-        );
-        const matchesQuery =
-          normalizedQuery.length === 0 ||
-          [
-            lead.id,
-            lead.name,
-            lead.phone,
-            lead.email ?? "",
-            lead.message,
-            property?.title ?? "",
-            property?.locality ?? "",
-          ]
-            .join(" ")
-            .toLowerCase()
-            .includes(normalizedQuery);
-
-        return (
-          matchesQuery &&
-          (status === "all" || lead.status === status) &&
-          (source === "all" || lead.source === source) &&
-          (propertyId === "all" ||
-            (propertyId === "general"
-              ? lead.propertyId === null
-              : lead.propertyId === propertyId))
-        );
-      }),
-    [leads, normalizedQuery, status, source, propertyId, properties],
-  );
-
-  const hasFilters =
-    normalizedQuery.length > 0 ||
-    status !== "all" ||
-    source !== "all" ||
-    propertyId !== "all";
+  async function refreshSelected(id: string) {
+    const result = await loadBrokerLeadDetail(id);
+    if (result.ok) setDeepLead(result.data);
+    else setFeedback(result.message);
+  }
 
   function clearFilters() {
+    setLoading(true);
     setQuery("");
     setStatus("all");
     setSource("all");
     setPropertyId("all");
+    setPage(1);
   }
 
   function propertyFor(lead: BrokerLead) {
@@ -184,6 +162,8 @@ export function AdminLeadsClient({
       }
 
       router.refresh();
+      setRevision((value) => value + 1);
+      void refreshSelected(selectedLead.id);
       setFeedback(
         result.changed
           ? `${selectedLead.id} moved to "${leadStatusLabels[nextStatus]}".${result.warning ? ` ${result.warning}` : ""}`
@@ -220,6 +200,8 @@ export function AdminLeadsClient({
 
       setNoteDraft("");
       router.refresh();
+      setRevision((value) => value + 1);
+      void refreshSelected(selectedLead.id);
       setFeedback(
         `Internal note saved.${result.warning ? ` ${result.warning}` : ""}`,
       );
@@ -354,18 +336,18 @@ export function AdminLeadsClient({
       <div className="mt-4 rounded-xl border border-border bg-card p-4 sm:p-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <p className="text-sm text-muted-foreground">
-            Showing{" "}
+            {loadError ? "Last loaded: " : "Showing "}
             <span className="font-semibold text-foreground">
               {filtered.length}
             </span>{" "}
             of{" "}
             <span className="font-semibold text-foreground">
-              {totalLeads}
+              {data.matchingTotal}
             </span>{" "}
-            {totalLeads === 1 ? "enquiry" : "enquiries"}
+            matching {data.matchingTotal === 1 ? "enquiry" : "enquiries"} · {data.total} total enquiries
           </p>
           <p className="text-xs text-muted-foreground">
-            Demo records are labelled individually
+            {loading ? "Loading enquiries…" : "Demo records are labelled individually"}
           </p>
         </div>
 
@@ -382,9 +364,10 @@ export function AdminLeadsClient({
               <Input
                 id="lead-search"
                 type="search"
+                maxLength={100}
                 value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder="Search name, phone, lead ID, or property"
+                onChange={(event) => { setLoading(true); setPage(1); setQuery(event.target.value); }}
+                placeholder="Search name, phone, email, lead or property"
                 className="pl-9"
               />
             </div>
@@ -398,7 +381,7 @@ export function AdminLeadsClient({
               id="lead-status-filter"
               value={status}
               onChange={(event) =>
-                setStatus(event.target.value as LeadStatus | "all")
+                (setLoading(true), setPage(1), setStatus(event.target.value as LeadStatus | "all"))
               }
             >
               <option value="all">All statuses</option>
@@ -417,7 +400,7 @@ export function AdminLeadsClient({
             <NativeSelect
               id="lead-source-filter"
               value={source}
-              onChange={(event) => setSource(event.target.value)}
+              onChange={(event) => { setLoading(true); setPage(1); setSource(event.target.value as LeadSource | "all"); }}
             >
               <option value="all">All sources</option>
               {Object.entries(leadSourceLabels).map(([value, label]) => (
@@ -435,7 +418,7 @@ export function AdminLeadsClient({
             <NativeSelect
               id="lead-property-filter"
               value={propertyId}
-              onChange={(event) => setPropertyId(event.target.value)}
+              onChange={(event) => { setLoading(true); setPage(1); setPropertyId(event.target.value); }}
             >
               <option value="all">All properties</option>
               <option value="general">General enquiries</option>
@@ -463,8 +446,14 @@ export function AdminLeadsClient({
       </div>
 
       <ActionFeedback message={feedback} className="mt-4" />
+      {loadError ? <div role="alert" className="mt-4 text-sm text-destructive">{loadError} <button type="button" className="underline" onClick={() => setRevision((value) => value + 1)}>Retry</button></div> : null}
+      <div className="mt-4 flex flex-wrap items-center gap-3 text-sm" aria-label="Enquiry pages">
+        <Button type="button" variant="outline" size="sm" disabled={loading || page <= 1} onClick={() => { setLoading(true); setPage((value) => Math.max(1, value - 1)); }}>Previous</Button>
+        <span>Page {data.page} of {totalPages}</span>
+        <Button type="button" variant="outline" size="sm" disabled={loading || data.page >= totalPages} onClick={() => { setLoading(true); setPage((value) => value + 1); }}>Next</Button>
+      </div>
 
-      {filtered.length === 0 ? (
+      {!loading && !loadError && filtered.length === 0 ? (
         <EmptyState
           className="mt-4"
           icon={Search}
@@ -477,7 +466,7 @@ export function AdminLeadsClient({
             </Button>
           }
         />
-      ) : (
+      ) : !loadError ? (
         <>
           <div className="mt-4 space-y-3 lg:hidden">
             {filtered.map((lead) => {
@@ -545,7 +534,7 @@ export function AdminLeadsClient({
             />
           </Card>
         </>
-      )}
+      ) : null}
 
       <AdminModal
         open={selectedLead !== null}

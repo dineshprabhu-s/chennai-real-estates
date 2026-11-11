@@ -1,6 +1,6 @@
 # Chennai Real Estates: website user guide
 
-This guide is for people looking for property and for the broker who manages listings and enquiries. It reflects the website features checked on 9 November 2026. Screen details may change as the website develops.
+This guide is for people looking for property and for the broker who manages listings and enquiries. It describes the features in the current project files, including work that may not yet be deployed. Screen details may change as the website develops.
 
 **Important:** Property information, prices and availability can change. Confirm details with the broker before making a decision. An enquiry is not a booking, and the website does not automatically arrange a visit.
 
@@ -146,9 +146,9 @@ Recent properties show up to five listings ordered by their last updated date. S
 
 ### Enquiry notifications
 
-The bell in the admin header shows a badge when there are unread enquiry notifications. Select it to open the notification panel. New general and property enquiries appear there while you work; the panel refreshes periodically while the tab is visible. Select **Open enquiry** to mark an unread notification as read and open its lead. You can instead choose **Mark as read** on one item or **Mark all as read** for all unread items. Opening the panel alone does not mark anything read. Read status is shared between broker accounts and remains saved when you return.
+When the notification feature is configured, the bell in the admin header shows a badge when there are unread enquiry notifications. Select it to open the notification panel. New general and property enquiries appear there while you work; the panel refreshes periodically while the tab is visible. Select **Open enquiry** to mark an unread notification as read and open its lead. You can instead choose **Mark as read** on one item or **Mark all as read** for all unread items. Opening the panel alone does not mark anything read. Read status is shared between broker accounts and remains saved when you return.
 
-If the panel says you are all caught up, there are no recent notifications. If it cannot load or save, follow the error message and retry. Notifications are in-app only: no email, WhatsApp, SMS or push alert is sent.
+The panel shows up to 20 recent notifications; the badge counts all unread notifications. If the panel says you are all caught up, there are no recent notifications. If it cannot load or save, follow the error message and retry. Notifications are in-app only: no email, WhatsApp, SMS or push alert is sent.
 
 Open **Areas** to search the saved localities and see total and public listing counts. Choose **Add Area** to enter a name, URL slug, PIN code, summary, description and optional highlights and parent area. Use **Edit** to change an area, or mark it active or inactive using its status control. Inactive areas are hidden from public area navigation. Read the save feedback; an error means the change was not saved, while a refresh warning means it was saved but some pages may need refreshing. There is no area delete control. If no areas appear, clear the search or add an area. Changing an area URL also changes its public link; update any external links.
 
@@ -243,11 +243,11 @@ To change one, choose the status in **Properties** and confirm the dialog. Selec
 ### 15. Managing enquiries
 
 1. Open **Leads / Enquiries**.
-2. Look for **New** enquiries, or use the search box and **Status**, **Source** and property filters. Search accepts a customer name, phone, lead ID or property.
+2. Look for **New** enquiries, or use the search box and **Status**, **Source** and property filters. Search accepts a customer name, phone, email, lead ID, message, property ID, property title or locality.
 3. Choose the view control on a row to open its details. On smaller screens, use the card's view control.
 4. Select **Clear filters** if you cannot find an expected record.
 
-The list shows a lead ID, customer name and phone, interested property or general enquiry, source, enquiry date and lead status. The inbox shows a recent window of enquiries and displays a notice if older records are not loaded; it is not an unlimited list. A **Demo** label identifies sample enquiries. Demo records are read-only: do not treat them as real customers.
+The list shows a lead ID, customer name and phone, interested property or general enquiry, source, enquiry date and lead status. Search and filters cover the full saved history. Use **Previous** and **Next** to move through pages of up to 25 matching enquiries; the screen shows the page, matching count and total count. Changing a search or filter returns to the first page; your choices remain in place when you move between pages. If enquiries arrive or change while you browse, page contents can shift; search for a specific lead ID if needed. If loading fails, use **Retry**. A **Demo** label identifies sample enquiries. Demo records are read-only: do not treat them as real customers.
 
 ### 16. Lead details and statuses
 
@@ -349,7 +349,7 @@ flowchart TD
 | Session expires | Sign in again; do not share credentials. |
 | Property save fails | Read field messages, check required details and verification/approval combinations, and retry. Do not assume a failed save succeeded. |
 | Property appears missing | Clear filters, check the actual Properties list and status, and reload if needed. Dashboard counts include all saved records, including drafts and any sample records. |
-| Lead list seems empty | Clear filters and check whether the expected record is older than the visible recent window. Contact the technical administrator if live data cannot load. |
+| Lead list seems empty | Clear filters, search for the lead, or move through the pages. Contact the technical administrator if live data cannot load. |
 | Status or note does not save | Wait for feedback, check whether the record is labeled Demo, then refresh or retry as directed. If a warning says the change saved but activity logging failed, do not repeat blindly; check the record and contact the administrator. |
 | Area change does not appear | Check the save message, refresh the page and retry if the save failed. If a refresh warning appears, the change was saved; check before repeating it. |
 

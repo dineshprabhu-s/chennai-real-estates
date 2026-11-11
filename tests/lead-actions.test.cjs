@@ -412,7 +412,7 @@ async function main() {
   assert(page.includes('searchParams'));
   assert(page.includes('params.lead'));
   assert(page.includes('params.status'));
-  assert(page.includes('getBrokerLeads'));
+  assert(page.includes('getBrokerLeadPage'));
   assert(page.includes('getBrokerLeadById'));
   assert(!page.includes('modules/leads/queries'));
 
