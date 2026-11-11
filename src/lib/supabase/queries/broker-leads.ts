@@ -21,10 +21,10 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { leadStatusOptions } from "@/modules/leads/constants";
 import type { LeadStatus, LeadSource } from "@/types/lead";
 
-const leadColumns =
-  "id,name,phone,email,message,property_id,status,created_at,source,is_demo,updated_at";
-const noteColumns = "id,lead_id,body,created_at";
-const activityColumns = "id,lead_id,occurred_at,label,detail";
+export const leadColumns =
+  "id,name,phone,email,message,property_id,customer_id,customers(name,phone,email),status,created_at,source,is_demo,updated_at";
+export const noteColumns = "id,lead_id,body,created_at";
+export const activityColumns = "id,lead_id,occurred_at,label,detail";
 const propertyOptionColumns = "id,title,locality,status";
 
 /**
@@ -60,12 +60,14 @@ function groupByLead<Row extends { lead_id: string }>(
   return grouped;
 }
 
+export { groupByLead };
+
 /**
  * Reads every child row for the supplied leads in stable pages. Supabase caps
  * a single response, so a single unbounded select could silently drop notes or
  * activities. Reads continue until the final page, so long histories are not silently truncated.
  */
-async function readLeadChildren<Row extends { lead_id: string }>(
+export async function readLeadChildren<Row extends { lead_id: string }>(
   supabase: SupabaseClient,
   table: "lead_notes" | "lead_activities",
   columns: string,
@@ -192,7 +194,7 @@ export async function getBrokerLeadPage(filters: BrokerLeadPageFilters): Promise
     const literal = keyword.replace(/[\\%_]/g, "\\$&").replace(/"/g, '\\"');
     const pattern = `"%${literal}%"`;
     query = query.or(`title.ilike.${pattern},locality.ilike.${pattern}`, { referencedTable: "search_property" });
-    query = query.or([...["id", "name", "phone", "email", "property_id", "message"].map((field) => `${field}.ilike.${pattern}`), "search_property.not.is.null"].join(","));
+    query = query.or([...["id", "name", "phone", "email", "customer_id", "property_id", "message", "customers.name", "customers.phone", "customers.email"].map((field) => `${field}.ilike.${pattern}`), "search_property.not.is.null"].join(","));
   }
   const [result, totalResult] = await Promise.all([
     query.order("created_at", { ascending: false }).order("id", { ascending: false }).range(offset, offset + BROKER_LEAD_PAGE_SIZE - 1),

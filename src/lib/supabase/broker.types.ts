@@ -45,6 +45,12 @@ export interface BrokerLeadRow {
   email: string | null;
   message: string;
   property_id: string | null;
+  customer_id: string | null;
+  customers: {
+    name: string;
+    phone: string;
+    email: string | null;
+  } | null;
   status: LeadStatus;
   created_at: string;
   source: LeadSource | null;
@@ -81,6 +87,8 @@ export interface BrokerLeadNote {
  */
 export interface BrokerLead {
   id: string;
+  /** Current customer record when the enquiry has been linked to one. */
+  customerId: string | null;
   name: string;
   phone: string;
   email: string | null;
@@ -118,4 +126,73 @@ export interface BrokerLeadInbox {
   total: number;
   limit: number;
   hasMore: boolean;
+}
+
+/**
+ * Row shape of `public.broker_customer_summary`. Aggregate counts come back
+ * from PostgREST as either numbers or strings, so the mapper coerces them.
+ */
+export interface BrokerCustomerSummaryRow {
+  id: string;
+  name: string;
+  phone: string;
+  email: string | null;
+  normalized_phone: string;
+  created_at: string;
+  updated_at: string;
+  enquiry_count: number | string;
+  active_enquiry_count: number | string;
+  latest_enquiry_at: string | null;
+  is_demo: boolean;
+  latest_activity_label: string | null;
+  latest_activity_at: string | null;
+}
+
+/** Broker-only customer projection. Server-side only; never cached across requests. */
+export interface BrokerCustomer {
+  id: string;
+  name: string;
+  phone: string;
+  email: string | null;
+  normalizedPhone: string;
+  createdAt: string;
+  updatedAt: string;
+  enquiryCount: number;
+  activeEnquiryCount: number;
+  latestEnquiryAt: string | null;
+  latestActivityLabel: string | null;
+  latestActivityAt: string | null;
+  isDemo: boolean;
+}
+
+/** A customer plus every linked enquiry, newest first. */
+export interface BrokerCustomerDetail extends BrokerCustomer {
+  enquiries: BrokerLead[];
+}
+
+export interface BrokerCustomerStats {
+  total: number;
+  withActiveEnquiries: number;
+  repeatCustomers: number;
+  newLast30Days: number;
+}
+
+export type BrokerCustomerSort =
+  | "recent-enquiry"
+  | "recent-activity"
+  | "name"
+  | "newest";
+
+export interface BrokerCustomerPageFilters {
+  page: number;
+  query: string;
+  sort: BrokerCustomerSort;
+}
+
+export interface BrokerCustomerPage {
+  customers: BrokerCustomer[];
+  page: number;
+  pageSize: number;
+  matchingTotal: number;
+  total: number;
 }

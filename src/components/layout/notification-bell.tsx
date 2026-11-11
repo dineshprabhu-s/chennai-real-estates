@@ -77,8 +77,8 @@ export function NotificationBell() {
         {snapshot.items.length === 0 ? <p className="text-sm text-muted-foreground">You’re all caught up. New enquiry notifications will appear here.</p> : null}
         <ul className="divide-y divide-border">
           {snapshot.items.map((item) => <li key={item.id} className="py-4">
-            <div className="flex items-center gap-2"><p className="font-semibold">New enquiry</p>{!item.readAt ? <span className="rounded bg-accent px-2 py-0.5 text-xs font-semibold">Unread</span> : <span className="text-xs text-muted-foreground">Read</span>}</div>
-            <p className="mt-1 text-sm">{item.customerName ? `New ${item.propertyId ? "property" : "general"} enquiry from ${item.customerName}.` : "The associated enquiry is no longer available."}</p>
+            <div className="flex flex-wrap items-center gap-2"><p className="font-semibold">New enquiry</p>{!item.readAt ? <span className="rounded bg-accent px-2 py-0.5 text-xs font-semibold">Unread</span> : <span className="text-xs text-muted-foreground">Read</span>}{item.customerContext ? <span className="rounded bg-muted px-2 py-0.5 text-xs font-semibold text-foreground">{item.customerContext === "new" ? "New customer" : "Existing customer"}</span> : null}</div>
+            <p className="mt-1 text-sm">{item.customerName ? `New ${item.propertyId ? "property" : "general"} enquiry from ${item.customerName}${item.customerContext === "existing" ? " (existing customer)" : ""}.` : "The associated enquiry is no longer available."}</p>
             {item.propertyId ? <p className="text-xs text-muted-foreground">Property {item.propertyId}</p> : null}
             <time className="text-xs text-muted-foreground" dateTime={item.createdAt}>{new Date(item.createdAt).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "medium", timeStyle: "short" })}</time>
             <div className="mt-2 flex gap-2">

@@ -1,5 +1,6 @@
 import {
   Building2,
+  ContactRound,
   LayoutDashboard,
   MapPin,
   PlusCircle,
@@ -36,5 +37,6 @@ export const adminNavigation: AdminNavigationItem[] = [
     exact: true,
   },
   { label: "Leads / Enquiries", href: "/admin/leads", icon: Users },
+  { label: "Customers", href: "/admin/customers", icon: ContactRound },
   { label: "Areas", href: "/admin/areas", icon: MapPin },
 ];

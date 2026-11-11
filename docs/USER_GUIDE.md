@@ -75,6 +75,8 @@ Use **Contact** for a general enquiry. For a question about one listing, open th
 
 A general enquiry describes what you are looking for without selecting a particular property. A property enquiry identifies a listing as well as your message. You can enquire about more than one property by opening each relevant property and sending a separate enquiry. Rapid repeated submissions for the same property may be rejected; wait before trying again.
 
+Enquiries made with the same phone number are kept together under one broker-side customer record, so the broker can see your earlier and later requests in one place. Each enquiry still keeps its own property, message, status and notes; sending a second enquiry does not overwrite the first. Giving a different name or email does not create a separate customer if the phone number is the same.
+
 ### 6. Sending an enquiry
 
 1. Open **Contact** for a general question, or open a property and find its enquiry form.
@@ -108,7 +110,7 @@ The website collects the enquiry; the broker and customer arrange any visit sepa
 
 **How do I contact the broker?** Use the enquiry form, or a configured phone, email or WhatsApp option. Confirm that contact details have been set up before relying on them.
 
-**Can I enquire about several properties?** Yes. Open each listing and send an enquiry for it. Wait if the website rejects a rapid duplicate.
+**Can I enquire about several properties?** Yes. Open each listing and send an enquiry for it. Enquiries using the same phone number appear together under your customer record for the broker, but each enquiry keeps its own details. Wait if the website rejects a rapid duplicate.
 
 **What happens next?** The enquiry is made available to the broker, who can contact you using the details supplied. No response time is guaranteed by the form.
 
@@ -128,7 +130,7 @@ The website collects the enquiry; the broker and customer arrange any visit sepa
 
 ### 9. The broker dashboard
 
-The admin area is for authorized broker accounts. It is separate from the public website and provides property and enquiry management. Its navigation includes **Dashboard**, **Properties**, **Add Property**, **Leads / Enquiries** and **Areas**.
+The admin area is for authorized broker accounts. It is separate from the public website and provides property and enquiry management. Its navigation includes **Dashboard**, **Properties**, **Add Property**, **Leads / Enquiries**, **Customers** and **Areas**.
 
 The dashboard shows saved property records and enquiry information:
 
@@ -146,7 +148,7 @@ Recent properties show up to five listings ordered by their last updated date. S
 
 ### Enquiry notifications
 
-When the notification feature is configured, the bell in the admin header shows a badge when there are unread enquiry notifications. Select it to open the notification panel. New general and property enquiries appear there while you work; the panel refreshes periodically while the tab is visible. Select **Open enquiry** to mark an unread notification as read and open its lead. You can instead choose **Mark as read** on one item or **Mark all as read** for all unread items. Opening the panel alone does not mark anything read. Read status is shared between broker accounts and remains saved when you return.
+When the notification feature is configured, the bell in the admin header shows a badge when there are unread enquiry notifications. Select it to open the notification panel. New general and property enquiries appear there while you work; the panel refreshes periodically while the tab is visible. An item may be labelled **New customer** when that enquiry created the customer record, or **Existing customer** when the same phone had already enquired. Older notifications may have no label. Select **Open enquiry** to mark an unread notification as read and open its lead. You can instead choose **Mark as read** on one item or **Mark all as read** for all unread items. Opening the panel alone does not mark anything read. Read status is shared between broker accounts and remains saved when you return.
 
 The panel shows up to 20 recent notifications; the badge counts all unread notifications. If the panel says you are all caught up, there are no recent notifications. If it cannot load or save, follow the error message and retry. Notifications are in-app only: no email, WhatsApp, SMS or push alert is sent.
 
@@ -243,7 +245,7 @@ To change one, choose the status in **Properties** and confirm the dialog. Selec
 ### 15. Managing enquiries
 
 1. Open **Leads / Enquiries**.
-2. Look for **New** enquiries, or use the search box and **Status**, **Source** and property filters. Search accepts a customer name, phone, email, lead ID, message, property ID, property title or locality.
+2. Look for **New** enquiries, or use the search box and **Status**, **Source** and property filters. Search accepts a customer name, phone, email, lead ID, message, property ID, property title or locality. It also matches the current customer record's name, phone and email.
 3. Choose the view control on a row to open its details. On smaller screens, use the card's view control.
 4. Select **Clear filters** if you cannot find an expected record.
 
@@ -251,7 +253,7 @@ The list shows a lead ID, customer name and phone, interested property or genera
 
 ### 16. Lead details and statuses
 
-The details view shows contact information, source, created date, interested property, original message, **Lead status**, **Internal notes** and **Activity history**. If a property is linked, **Open property record** takes the broker to it. A general enquiry has no selected listing.
+The details view shows contact information, source, created date, interested property, original message, **Lead status**, **Internal notes** and **Activity history**. If a property is linked, **Open property record** takes the broker to it. A general enquiry has no selected listing. Contact details follow the current customer record, so a corrected name, phone or email appears on every linked enquiry; the original message is not rewritten. When the enquiry is linked to a customer, an **Existing customer** control opens that customer's full history.
 
 | Lead status | Practical meaning |
 |---|---|
@@ -263,6 +265,14 @@ The details view shows contact information, source, created date, interested pro
 | **Closed / lost** | The enquiry did not proceed. |
 
 To update a non-demo enquiry, open it and select a value under **Lead status**. The website saves the selection; there is no separate Save button for this control. Wait for the saving indicator and feedback, then check the status. A conflicting or failed update asks you to refresh or retry. An activity entry is normally added; if the status saved but the history entry could not be recorded, the website reports a warning. A status is a record of your work, not an automatic customer notification or property-status change.
+
+### Customer records and enquiry history
+
+Open **Customers** to see one broker-side record per normalized phone number. The list shows the customer name, phone, email, number of enquiries, active enquiries and the latest enquiry and activity. Enter a name, phone number, email or customer ID in the search box, choose a sort order such as **Latest enquiry**, **Latest activity**, **Newest customer** or **Name**, and use **Previous** and **Next** to move through pages of up to 25 matching customers. The screen reports the matching and total customer counts. Use **Clear filters** to return to the default view, or **Retry** if loading fails.
+
+Select **Open** (or **Open customer** on a smaller screen) to see a customer's current contact details and complete enquiry history. Enquiries are listed newest first. Each one keeps its own enquiry ID, status, source, date, interested property, original message, internal notes and activity history. **Open enquiry** opens that individual enquiry in the existing **Leads / Enquiries** workspace, where its status and notes are managed; **Open all enquiries** opens the full enquiry list.
+
+To correct a customer's name, phone or email, change the fields under **Customer details** and select **Save customer**. The phone number is how future enquiries are matched to this customer, so enter the number the customer actually uses. If the number already belongs to another customer, the save is rejected rather than combining the two histories. Changing a phone number never merges enquiries, rewrites an original message or changes any enquiry's status. A customer created only from seeded demo enquiries is read-only; a customer with any real enquiry can be edited. If the save message says the details were saved but some pages could not be refreshed, refresh before assuming a display is current.
 
 ### 17. Notes and activity history
 
@@ -279,7 +289,7 @@ Notes are visible in the broker workspace, not public property pages. The curren
 This is a suggested working routine, not an automatic workflow:
 
 1. Sign in and review the dashboard and recent property records.
-2. Open **Leads / Enquiries** and check New enquiries, ignoring labeled demo records.
+2. Open **Leads / Enquiries** and check New enquiries, ignoring labeled demo records. Open **Customers** when you need every enquiry from the same phone number in one place.
 3. Contact each customer using the information provided.
 4. Update the lead status and add a concise internal note after the conversation.
 5. Arrange any property visit directly, then record **Visit scheduled** when appropriate.
@@ -304,6 +314,9 @@ flowchart TD
 |---|---|
 | Property ID | Permanent reference for a property listing. |
 | Lead ID | Reference for an individual enquiry. |
+| Customer | One broker-side contact record, matched by normalized phone number, that can hold several enquiries. |
+| Normalized phone | The phone digits used for customer matching after removing formatting and a standard Indian prefix; names and emails are not used for matching. |
+| Enquiry history | All enquiries linked to one customer, each with its own property, message, status, notes and activity. |
 | WhatsApp reference | A separate broker reference; it is not the public property ID. |
 | Rental | An arrangement to rent a property under agreed payment and terms. |
 | Lease | An arrangement for a period under agreed terms; ask the broker about payment. |
@@ -326,7 +339,8 @@ flowchart TD
 - An enquiry does not reserve a property or book a visit. Availability, prices, negotiability, approval and missing details require broker confirmation.
 - Property images are illustrations; files selected in the broker form are previews and are not uploaded.
 - Property counts include any sample properties stored in the catalogue; confirm which records are real before relying on the figures.
-- Demo enquiries are labeled and read-only. Do not treat them as real customer requests.
+- Demo enquiries are labeled and read-only; do not treat them as real customer requests. A customer derived only from seeded demo enquiries is also read-only, while a customer with any real enquiry can be edited.
+- Customer records are matched by phone number only. Two customers are not merged automatically, and an ambiguous number is not guessed; correct a phone number in **Customers** if needed. The customer database changes require disposable-database and staging verification before you rely on them in a live environment.
 - Contact details must be configured correctly before customers can rely on the phone, email or optional WhatsApp links.
 - The site does not offer a customer appointment calendar, saved-property account, external notification alerts or a property-delete control in the described workflows.
 
@@ -339,6 +353,7 @@ flowchart TD
 | A property page is unavailable | It may no longer be offered or its link may be wrong. Ask the broker using the property ID if you have it. |
 | The form rejects information | Check highlighted fields, the 10–15 phone digits and the minimum message length. An email is optional but must be valid if entered. |
 | Enquiry sending fails or asks you to wait | Read the feedback, wait before retrying, or contact the broker using a verified alternative. Do not assume the enquiry was sent without confirmation. |
+| I have enquired before | If you use the same phone number, the broker can see your enquiries together. Mention the earlier property ID so they can find the right one. Each enquiry keeps its own message and status. |
 | A contact option does not work | WhatsApp may not be configured, and current contact details are placeholders. Ask the site administrator for a verified contact method. |
 
 ### 22. Troubleshooting for brokers
@@ -351,6 +366,9 @@ flowchart TD
 | Property appears missing | Clear filters, check the actual Properties list and status, and reload if needed. Dashboard counts include all saved records, including drafts and any sample records. |
 | Lead list seems empty | Clear filters, search for the lead, or move through the pages. Contact the technical administrator if live data cannot load. |
 | Status or note does not save | Wait for feedback, check whether the record is labeled Demo, then refresh or retry as directed. If a warning says the change saved but activity logging failed, do not repeat blindly; check the record and contact the administrator. |
+| Customer search seems empty | Clear filters, check the spelling of the name or phone number, and move through the pages. A customer appears only after a linkable enquiry exists. |
+| Customer phone save is rejected | The number already belongs to another customer. Check the number, search for the existing customer, and correct the intended record; the site will not merge the histories automatically. |
+| Customer is read-only | It is derived only from seeded demo enquiries. A customer with at least one real enquiry can be edited. |
 | Area change does not appear | Check the save message, refresh the page and retry if the save failed. If a refresh warning appears, the change was saved; check before repeating it. |
 
 This guide uses diagrams instead of screenshots so it does not include customer information or credentials.

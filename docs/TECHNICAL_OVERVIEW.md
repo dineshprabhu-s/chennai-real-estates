@@ -1,6 +1,6 @@
 # Chennai Real Estates: technical overview
 
-**Purpose:** engineering onboarding and maintenance reference. **Repository review:** 2026-11-11, on `main` at committed checkpoint `c362bdec76a38ce49595219a0cbec6e59c060330` plus the uncommitted lead-history changes. This review does not verify staging or production state.
+**Purpose:** engineering onboarding and maintenance reference. **Repository review:** 2026-11-11, on `main` at committed checkpoint `c362bdec76a38ce49595219a0cbec6e59c060330` plus the uncommitted lead-history and customer-centric enquiry changes. This review does not verify staging or production state.
 
 This documents checked-in source and SQL, not the state of a deployed database. Source code and migrations are authoritative; update this guide when architecture, schema, authorization, security, or major workflows change. The discarded phone-rate-limit experiment is not implemented.
 
@@ -8,9 +8,9 @@ This documents checked-in source and SQL, not the state of a deployed database. 
 
 This is a single-broker property platform centered on Madipakkam and nearby Chennai areas. Visitors browse listings and locality guides, then contact the broker. The intended journey is visitor → catalogue → detail → enquiry → broker inbox → customer contact → site visit → follow-up. The application records enquiries and status; scheduling, verification, and transactions still require people.
 
-A **listing** advertises a property; **resale** means an existing property being sold, rather than a separate database transaction type. **Lease** is one of sale/rent/lease; exact financial terms require broker confirmation. **Brokerage** is the broker's fee, represented as independent free text and optional structured terms. A **lead** or **enquiry** is a potential customer request; a **site visit** is an offline event. Availability status, legal approval, and broker verification are separate concepts (§6).
+A **listing** advertises a property; **resale** means an existing property being sold, rather than a separate database transaction type. **Lease** is one of sale/rent/lease; exact financial terms require broker confirmation. **Brokerage** is the broker's fee, represented as independent free text and optional structured terms. A **customer** is one person or contact number identified by normalized phone; a **lead** or **enquiry** is one potential request attached to that customer and may carry its own property, message and status. A **site visit** is an offline event. Availability status, legal approval, and broker verification are separate concepts (§6).
 
-Public catalogue and enquiries, broker authentication, dashboard, property management, area management, and lead management use Supabase. Image uploads, external messaging, comprehensive bot protection, and verified production operations are not established here. Persistent in-app broker notifications are defined by a forward migration.
+Public catalogue and enquiries, broker authentication, dashboard, customer directory, property management, area management, and lead management use Supabase. Image uploads, external messaging, comprehensive bot protection, and verified production operations are not established here. Persistent in-app broker notifications and the customer-centric schema are defined by forward migrations.
 
 ## 2. Technology stack
 
@@ -51,21 +51,21 @@ flowchart LR
   RPC --> DB
 ```
 
-The public client is server-only and independent of visitor cookies. Broker reads/actions use the request-bound client plus `requireBroker()` and database RLS. The public form validates in the browser and Server Action; the anonymous RPC validates again and atomically creates a lead, initial activity and broker notification once the notification migration is applied. Client components manage interactions and receive only data intentionally passed to them; the authorized broker form receives private fields it needs.
+The public client is server-only and independent of visitor cookies. Broker reads/actions use the request-bound client plus `requireBroker()` and database RLS. The public form validates in the browser and Server Action; the anonymous RPC validates again and atomically resolves or creates the customer and creates a lead, initial activity and broker notification once the notification migration is applied. Client components manage interactions and receive only data intentionally passed to them; the authorized broker form receives private fields it needs.
 
 ## 4. Repository and folder structure
 
 ```text
 src/
   app/(public)/             public pages, layouts and contact action
-  app/admin/(dashboard)/    guarded admin pages, property and lead actions
+  app/admin/(dashboard)/    guarded admin pages, property, lead and customer actions
   app/admin/login/          password login
   components/               admin, areas, common, forms, layout, property, ui
   config/                   branding and navigation
   hooks/                    hydration and scroll helpers
   lib/auth/                 broker authorization and redirect validation
   lib/supabase/             clients, projections, queries, mappers, validation
-  lib/validation/           shared public lead validation
+  lib/validation/           shared public lead and customer validation
   modules/                  labels, filters, demo data and presentation helpers
   types/                    domain types
   proxy.ts                  admin route gate and session refresh
@@ -94,6 +94,8 @@ Public routes depend on anonymous queries and shared presentation; broker routes
 | `/admin/properties/new` | Broker create | `PropertyForm`, broker areas, create action |
 | `/admin/properties/[id]/edit` | Broker edit | Broker reads, `PropertyForm`, update action |
 | `/admin/leads` | Broker inbox | `AdminLeadsClient`, lead/property option reads, guarded actions |
+| `/admin/customers` | Broker customer directory | `AdminCustomersClient`, customer summary reads, guarded paging/search action |
+| `/admin/customers/[id]` | Broker customer details | Customer summary, complete linked enquiry history, guarded edit form |
 | `/admin/areas` | Broker area management | `AdminAreasClient`, guarded area reads and actions |
 
 Pages are Server Components by default; forms, controls, dialogs and responsive menus use Client Components. Public and admin layouts provide separate shells; root/group `loading.tsx`, `error.tsx`, and root `not-found.tsx` provide boundaries. Public detail pages resolve slugs via anonymous queries and call `notFound()` for missing or unavailable records; database errors throw. Metadata uses public title/summary. A loading boundary can stream before `notFound()`, so the not-found UI can be returned with HTTP 200; verify actual HTTP behavior before relying on it for SEO. The dashboard layout obtains identity for its shell; it is not an independent authorization boundary. Protected pages, broker DAL functions and actions apply broker guards in addition to the proxy.
@@ -106,6 +108,7 @@ Source of truth: `supabase/migrations/20261107000000_initial_schema.sql`. `N` me
 erDiagram
   AREAS ||--o{ PROPERTIES : area_slug
   PROPERTIES o|--o{ LEADS : property_id
+  CUSTOMERS o|--o{ LEADS : customer_id
   LEADS ||--o{ LEAD_NOTES : lead_id
   LEADS ||--o{ LEAD_ACTIVITIES : lead_id
   LEADS o|--o| BROKER_NOTIFICATIONS : lead_id
@@ -162,6 +165,21 @@ erDiagram
 | `listed_at` | date | Required listing date |
 | `updated_at` | date default current_date | Date trigger, not a timestamp |
 
+### Customers
+
+Source: `supabase/migrations/20261112000000_customer_centric_enquiries.sql`.
+
+| Column | Type / default | Constraint or meaning |
+|---|---|---|
+| `id` | text, sequence-generated | PK; `CUST-` business ID, nonblank |
+| `name` | text | Nonblank; broker-facing current name |
+| `phone` | text | Nonblank; broker-facing phone value. New public enquiries store the canonical digits, while a broker edit keeps the entered display value |
+| `normalized_phone` | text, generated stored | `public.normalize_customer_phone(phone)`; required 10–15 digits; unique |
+| `email` | text, N | Optional current email |
+| `created_at`, `updated_at` | timestamptz default `now()` | Update trigger on `updated_at` |
+
+Customer identity is the normalized phone only; names and emails are not matching keys. `normalize_customer_phone(text)` strips formatting, canonicalizes an Indian mobile with optional `+91`/`91` or a single leading `0`, and retains other 10–15 digit values unchanged rather than guessing. The generated column and unique constraint make concurrent customer creation safe. The function is `immutable`, `strict`, has an empty search path, and is executable by `authenticated` so broker updates recalculate the generated value; anonymous callers use it indirectly through the definer RPC.
+
 ### Leads, notes and activities
 
 | Column | Type / default | Constraint or meaning |
@@ -170,7 +188,8 @@ erDiagram
 | `leads.name`, `phone`, `message` | text | Nonblank name/message; the table constraint checks that phone contains 10–15 digits after removing nondigits; it does not normalize the stored value |
 | `leads.email` | text, N | Optional |
 | `leads.property_id` | text, N | FK properties; update cascade, delete restrict |
-| `leads.status` | lead_status default `new` | Pipeline state |
+| `leads.customer_id` | text, N | FK customers; update cascade, delete restrict; nullable for safety, backfilled from normalized phone |
+| `leads.status` | lead_status default `new` | Pipeline state, independent per enquiry |
 | `leads.source` | lead_source, N | RPC derives source |
 | `leads.is_demo` | boolean default false | Seeded demo rows are application read-only |
 | `leads.created_at`, `updated_at` | timestamptz default `now()` | Updated-at trigger |
@@ -182,6 +201,12 @@ erDiagram
 | `lead_activities.lead_id` | text | FK leads; delete cascade |
 | `lead_activities.occurred_at` | timestamptz | Required timestamp |
 | `lead_activities.label`, `detail` | text; detail N | Label nonblank |
+
+The customer migration backfills `leads.customer_id` by grouping existing leads on the normalized phone. It keeps lead IDs, statuses, sources, messages, timestamps, notes, activities, property associations and demo markers unchanged; the lead updated-at trigger is disabled only while adding the link and restored inside the same migration transaction. The RPC stores the lead phone as digits-only and the customer phone as the canonical normalized value, so broker edits update the current customer contact while the enquiry message remains historical. A lead whose phone cannot be normalized stays unlinked rather than being forced into an incorrect customer.
+
+### Broker customer summary view
+
+`public.broker_customer_summary` is `security_invoker`, so customer and lead RLS still apply. It exposes current customer fields plus `enquiry_count`, `active_enquiry_count` (new, contacted, visit-scheduled or negotiation), `latest_enquiry_at`, `is_demo` (true only when every linked enquiry is demo) and the latest activity label/time. It is granted to `authenticated` only; anonymous users have no grant.
 
 `MAD-...` and `LEAD-...` are business IDs; Auth user IDs belong to Supabase Auth. There is no image table in these migrations.
 
@@ -201,7 +226,7 @@ erDiagram
 | `lead_status` | `new`, `contacted`, `visit-scheduled`, `negotiation`, `converted`, `closed-lost` |
 | `lead_source` | `website-form`, `property-enquiry`, `whatsapp`, `phone` |
 
-Indexes: `properties_area_slug_idx`, `properties_status_idx`, partial `properties_public_browse_idx`, partial `properties_public_featured_idx`, `properties_updated_at_idx`, partial `areas_active_idx`, `leads_status_idx`, `leads_created_at_idx`, `leads_property_id_idx`, `lead_notes_lead_created_idx`, `lead_activities_lead_occurred_idx`, and PK/unique indexes. Areas and leads use timestamp updated-at triggers; properties use a date trigger. Exact check names and RLS policies are in the initial migration; access is summarized in §9.
+Indexes: `properties_area_slug_idx`, `properties_status_idx`, partial `properties_public_browse_idx`, partial `properties_public_featured_idx`, `properties_updated_at_idx`, partial `areas_active_idx`, `leads_status_idx`, `leads_created_at_idx`, `leads_property_id_idx`, `leads_customer_created_idx`, `lead_notes_lead_created_idx`, `lead_activities_lead_occurred_idx`, and PK/unique indexes including the customer normalized-phone key. Areas and leads use timestamp updated-at triggers; properties use a date trigger; customers use a timestamp trigger. Exact check names and RLS policies are in the migrations; access is summarized in §9.
 
 ## 7. Supabase integration architecture
 
@@ -251,18 +276,20 @@ sequenceDiagram
 
 ## 9. Database security and row-level security
 
-The five original tables and the new broker notification table have RLS. `public.is_broker()` is security-invoker, has an empty search path, and checks JWT `app_metadata.role`; authenticated users may execute it. Grants permit operations, policies restrict rows.
+The five original tables and the broker notification and customer tables have RLS. `public.is_broker()` is security-invoker, has an empty search path, and checks JWT `app_metadata.role`; authenticated users may execute it. Grants permit operations, policies restrict rows.
 
 | Resource | Anonymous | Authenticated non-broker | Authenticated broker |
 |---|---|---|---|
 | Areas read | Active only | No matching policy | All |
 | Properties read | `available` / `under-offer`, public columns only | No matching policy | All columns/statuses |
 | Area/property writes | None | No matching policy | CRUD under broker policies |
+| Customers | No direct access | No matching policy | Read and update only; no insert or delete grant |
+| `broker_customer_summary` view | No grant | No matching policy | Select under invoker RLS |
 | Lead/note/activity tables | No direct access | No matching policy | CRUD under broker policies |
 | Broker notifications | No direct access | No matching policy | Read and update read timestamp only |
 | `submit_public_lead` | Execute | No execute grant | No authenticated execute grant; public client remains anon |
 
-Authenticated table CRUD grants are constrained by broker policies with `USING` and `WITH CHECK`. Anonymous has no direct lead-table/sequence grants. Authenticated receives usage on property, lead and note sequences. The RPC is owned by `postgres`, `SECURITY DEFINER`, `RETURNS void`, has empty `search_path` and explicit execute grants/revokes.
+Authenticated table CRUD grants are constrained by broker policies with `USING` and `WITH CHECK`. Anonymous has no direct lead-table, customer-table or sequence grants. Authenticated receives usage on property, lead and note sequences, but not the customer sequence: only the security-definer RPC creates customers. The customer update grant exists because brokers edit the current name, phone and email; the generated normalized-phone column still enforces uniqueness. The RPC is owned by `postgres`, `SECURITY DEFINER`, `RETURNS void`, has empty `search_path` and explicit execute grants/revokes. `normalize_customer_phone` is executable by `authenticated` only so a broker phone update can recalculate the generated column.
 
 Publicly granted property columns: `id`, `slug`, `title`, `summary`, `public_description`, `type`, `configuration`, `listing_type`, `status`, `price`, `price_negotiable`, `bedrooms`, `bathrooms`, `built_up_area_sqft`, `carpet_area_sqft`, `uds_sqft`, `floor`, `facing`, `building_age_years`, `has_lift`, `parking`, `furnishing`, `approval_status`, `brokerage`, `brokerage_type`, `brokerage_value`, `availability_note`, `landmark`, `total_floors`, `security_deposit`, `last_verified_at`, `area_slug`, `locality`, `features`, `is_featured`, `verification_status`, `listed_at`, `updated_at`. Private `description`, `address` and `whatsapp_reference` are omitted from grants and queries. `mapPublicProperty` maps `public_description` to domain `description`.
 
@@ -306,7 +333,7 @@ sequenceDiagram
   A->>A: repeat validation
   A->>C: approved RPC arguments
   C->>R: anonymous invocation
-  R->>D: validate, lock, insert lead, activity and notification
+  R->>D: validate, lock, resolve customer, insert lead, activity and notification
   D-->>R: transaction outcome
   R-->>A: void or safe error code
   A-->>F: serializable feedback
@@ -317,7 +344,7 @@ sequenceDiagram
 
 The server-rendered form specifies fixed `POST /contact`, disables its button until hydration and explains the JavaScript requirement. Hydrated submission prevents default, validates, focuses the first invalid field, prevents concurrent clicks with a ref and pending state, and calls the action. Verify the actual no-JavaScript and implicit-Enter behavior before launch.
 
-`public.submit_public_lead(p_name text, p_phone text, p_email text, p_message text, p_property_id text default null) returns void` is defined and subsequently replaced by the public-lead and broker-notification migrations. It derives source, `status='new'`, `is_demo=false`, IDs and timestamps. Invalid input uses `22023`; missing/nonpublic property uses `P0001`; a same-phone/same-property enquiry within 60 seconds uses `P0002`. An advisory transaction lock serializes that pair, and lead, initial activity and notification inserts are atomic after the notification migration. The action returns safe serializable feedback, not IDs or raw errors. The website honeypot is not enforced for direct anonymous RPC calls. No durable per-phone/IP limit, CAPTCHA or configured WAF is implemented; direct invocation and rotating numbers remain risks.
+`public.submit_public_lead(p_name text, p_phone text, p_email text, p_message text, p_property_id text default null) returns void` is defined by the public-lead migration and subsequently replaced by the broker-notification and customer-centric migrations. It derives source, `status='new'`, `is_demo=false`, IDs and timestamps. Invalid input uses `22023`; missing/nonpublic property uses `P0001`; a same-phone/same-property enquiry within 60 seconds uses `P0002`. The duplicate guard also matches a recent lead linked to the same customer, so a broker phone edit does not bypass it. An advisory transaction lock serializes that pair, and customer resolution, lead, initial activity and notification inserts are atomic after the customer migration. Customer resolution also takes a per-normalized-phone lock and upserts on the unique normalized phone; the function returns no customer or lead ID. The action returns safe serializable feedback, not IDs or raw errors. The website honeypot is not enforced for direct anonymous RPC calls. No durable per-phone/IP limit, CAPTCHA or configured WAF is implemented; direct invocation and rotating numbers remain risks.
 
 ## 12. Broker administration workflows
 
@@ -335,13 +362,21 @@ Property actions revalidate the admin list/edit, home, catalogue, area list, pro
 
 ### Broker notifications
 
-`broker_notifications` stores a UUID, nullable lead foreign key, type, creation time and nullable read time. Deleting an associated lead leaves a notification without a lead; no customer contact details are stored in the notification row. An index supports recent ordering and a partial index supports unread counts. Broker RLS permits select and update; column grants allow authenticated users to update only `read_at`, with RLS restricting rows to brokers. Anonymous users have no table access. The security-definer `submit_public_lead` inserts the notification after lead and initial activity in the same transaction; failure rolls back all three. Existing and demo leads are not backfilled. The RPC signature, owner, empty search path, validation, duplicate guard and anon-only execute grant remain unchanged.
+`broker_notifications` stores a UUID, nullable lead foreign key, type, optional `customer_context` (`new`/`existing`), creation time and nullable read time. Deleting an associated lead leaves a notification without a lead; no customer contact details are stored in the notification row. An index supports recent ordering and a partial index supports unread counts. Broker RLS permits select and update; column grants allow authenticated users to update only `read_at`, with RLS restricting rows to brokers. Anonymous users have no table access. The security-definer `submit_public_lead` inserts the notification after customer, lead and initial activity in the same transaction; failure rolls back all four. Historical notifications keep `customer_context = NULL`; they are not backfilled. The RPC signature, owner, empty search path, validation, duplicate window and anon-only execute grant remain unchanged.
 
-`getBrokerNotifications` uses the request-bound client and broker guard, selecting 20 recent records ordered by creation time and UUID descending plus an exact unread count. It joins only the lead name and property reference, not phone, email or message. `loadBrokerNotifications`, `markBrokerNotificationRead` and `markAllBrokerNotificationsRead` independently require a broker; write actions update only `read_at`. `NotificationBell` displays a drawer and polls the guarded load action every 30 seconds while the tab is visible, refreshes when the tab becomes visible or the drawer opens, and cleans up its timer on unmount. Read state is shared among all broker accounts. Poll failures display an error instead of a fabricated count; clicking an unread item confirms the update before navigating to `/admin/leads?lead=...`. There is no Realtime configuration or external messaging. Migration application, RLS and polling require staging verification.
+`getBrokerNotifications` uses the request-bound client and broker guard, selecting 20 recent records ordered by creation time and UUID descending plus an exact unread count. It joins only the lead name/property reference and the current customer name, not phone, email or message. `loadBrokerNotifications`, `markBrokerNotificationRead` and `markAllBrokerNotificationsRead` independently require a broker; write actions update only `read_at`. `NotificationBell` displays a drawer and polls the guarded load action every 30 seconds while the tab is visible, refreshes when the tab becomes visible or the drawer opens, and cleans up its timer on unmount. Items carry **New customer** or **Existing customer** labels when the database recorded that context. Read state is shared among all broker accounts. Poll failures display an error instead of a fabricated count; clicking an unread item confirms the update before navigating to `/admin/leads?lead=...`. There is no Realtime configuration or external messaging. Migration application, RLS and polling require staging verification.
+
+### Customers
+
+`/admin/customers` uses `getBrokerCustomerPage` and `getBrokerCustomerStats`. Listing search covers customer ID, name, phone, normalized phone and email; sorting supports latest enquiry, latest activity, newest customer and name, with 25-row server-side pages and exact matching/total counts. Search and paging run as a guarded Server Action (`loadBrokerCustomerHistory`) with a 350 ms debounce, so rows are filtered by PostgREST under broker RLS rather than loaded and filtered in the browser. The four headline metrics are total customers, customers with at least one active enquiry, repeat customers (two or more enquiries) and customers created in the last 30 days.
+
+`/admin/customers/[id]` uses `getBrokerCustomerById`, which reads the summary row and pages through every linked enquiry in `created_at`/`id` descending order, then loads notes and activities in bounded pages. The page shows current customer name, phone, email, normalized phone, counts, latest enquiry and activity, and each enquiry's property, original message, status, notes and activity timeline. **Open enquiry** uses the existing `/admin/leads?lead=...` deep link, so status and notes remain managed by the existing enquiry workspace rather than a second write path.
+
+`updateBrokerCustomer` validates the customer ID and shared name/phone/email rules, re-reads the authoritative summary row, rejects demo-only customers and skips an unchanged save. It updates only `name`, `phone` and `email`; the generated normalized phone recalculates, and a unique violation is reported as a phone conflict. It never merges two customers or rewrites lead snapshots, and it revalidates the customer list/detail, leads and dashboard. The edit form is disabled for demo-only customers and reports field errors plus partial-success refresh warnings. Customers with a mixed demo/real history are editable because the view marks `is_demo` only when every linked enquiry is demo.
 
 ### Leads
 
-`/admin/leads` uses `getBrokerLeadPage`, `getBrokerPropertyOptions`, exact status statistics and optional `getBrokerLeadById` deep-link lookup. `AdminLeadsClient` calls the guarded `loadBrokerLeadHistory` Server Action to search and filter the full history with a 350 ms debounce; it fetches 25 rows per page ordered by `created_at` descending and `id` descending. Search matches ID, name, phone, email, message, property ID, and related property title/locality. A PostgREST empty embedded relation supports the related-property search under broker RLS. Status, source and property/general filters combine with search; exact matching and overall counts are obtained separately. Search text is limited to 100 characters and stays in client state and action requests rather than URL query parameters. The history changes are uncommitted at this checkpoint; the PostgREST relationship search and end-to-end pagination have not been verified against staging in this review. The requested notification lead is loaded independently of the current page. Detail, status, notes and activity remain available. Seeded demo leads are labeled and guarded actions reject modifications based on the authoritative `is_demo` row. `updateBrokerLeadStatus` conditionally updates the previous status; `addBrokerLeadNote` validates nonblank text. Both attempt activity insertion separately and revalidate `/admin/leads` and `/admin/dashboard`. Broker actions are **not atomic** with their activity insert: a saved change can return an activity warning.
+`/admin/leads` uses `getBrokerLeadPage`, `getBrokerPropertyOptions`, exact status statistics and optional `getBrokerLeadById` deep-link lookup. `AdminLeadsClient` calls the guarded `loadBrokerLeadHistory` Server Action to search and filter the full history with a 350 ms debounce; it fetches 25 rows per page ordered by `created_at` descending and `id` descending. Search matches ID, name, phone, email, message, property ID, related property title/locality, and the linked customer's name, phone and email. A PostgREST empty embedded relation supports the related-property search under broker RLS. Status, source and property/general filters combine with search; exact matching and overall counts are obtained separately. Search text is limited to 100 characters and stays in client state and action requests rather than URL query parameters. The history changes are uncommitted at this checkpoint; the PostgREST relationship search and end-to-end pagination have not been verified against staging in this review. The requested notification lead is loaded independently of the current page. Detail, status, notes and activity remain available. Contact fields in the detail view prefer the current customer record while the enquiry message stays historical; a linked enquiry shows an **Existing customer** link to its customer page. Seeded demo leads are labeled and guarded actions reject modifications based on the authoritative `is_demo` row. `updateBrokerLeadStatus` conditionally updates the previous status; `addBrokerLeadNote` validates nonblank text. Both attempt activity insertion separately and revalidate `/admin/leads` and `/admin/dashboard`. Broker actions are **not atomic** with their activity insert: a saved change can return an activity warning.
 
 ```mermaid
 sequenceDiagram
@@ -362,7 +397,7 @@ sequenceDiagram
 
 ## 13. Data validation and error handling
 
-Shared public validation is in `src/lib/validation/public-lead.ts`; the form and action invoke it, and PostgreSQL independently validates. Broker property validation is `src/lib/supabase/validation/broker-property-input.ts`; it checks enum values, decimal precision, dates, booleans, area references and verification/approval combinations. `property-form-adapter.ts` distinguishes omitted fields, intentional clears, false and zero. Broker lead actions validate IDs, statuses and note text.
+Shared public validation is in `src/lib/validation/public-lead.ts`; the form and action invoke it, and PostgreSQL independently validates. Broker property validation is `src/lib/supabase/validation/broker-property-input.ts`; it checks enum values, decimal precision, dates, booleans, area references and verification/approval combinations. `property-form-adapter.ts` distinguishes omitted fields, intentional clears, false and zero. Broker lead actions validate IDs, statuses and note text. Shared customer validation is `src/lib/validation/customer.ts`: name 2–120 characters, phone 10–15 digits after the same normalization rules, optional email up to 254 characters, and customer IDs in `CUST-` form. It intentionally has no server-only import so the client edit form and guarded Server Action can share it; PostgreSQL remains authoritative for normalization and uniqueness.
 
 Public single-record queries return `null` only for missing rows and throw on database errors. Actions return safe discriminated results; invalidation failure after a successful write is a warning, not a failed mutation. No broad demo fallback should mask live read errors. Client validation is convenience, not a security boundary.
 
@@ -370,7 +405,7 @@ Public single-record queries return `null` only for missing rows and throw on da
 
 React state handles forms, filters, dialogs and pending state. Admin data comes from guarded server reads; the lead inbox stores the latest page returned by a Server Action in client state. Actions use `revalidatePath`; lead updates and property status changes also call `router.refresh()`. Property create/edit forms show action feedback and rely on action invalidation and subsequent user navigation rather than calling `router.refresh()` themselves. `next.config.ts` enables Cache Components and partial prefetching. Several request-dependent pages set `instant = false`; auth uses `connection()` to avoid prerendering request-time token checks. Never cache a cookie-bound client or private rows across users.
 
-Public queries have deterministic ordering but no application pagination and can be affected by backend response caps. Broker inbox uses 25-row database pages, an exact matching count and an exact overall count; offset pagination can shift between requests when concurrent inserts or updates change ordering. Child rows and property options are fetched in 500-row pages until exhausted; the property selector loads all options and very large note or activity histories can increase page load time. Leading-wildcard text search and exact counts can be expensive on a large dataset; evaluate query plans before adding indexes. Indexes are listed in §6. No Storage or persistent image-upload pipeline is configured; the browser-only preview uses Next Image for selected local files.
+Public queries have deterministic ordering but no application pagination and can be affected by backend response caps. Broker inbox and customer directory use 25-row database pages, exact matching counts and exact overall counts; offset pagination can shift between requests when concurrent inserts or updates change ordering. Child rows and property options are fetched in 500-row pages until exhausted; the property selector loads all options and very large note, activity or customer-enquiry histories can increase page load time. The customer summary view aggregates enquiry counts and latest activity in the database, and the detail query pages through linked enquiries rather than selecting an unbounded result. Leading-wildcard text search and exact counts can be expensive on a large dataset; evaluate query plans before adding indexes. Indexes are listed in §6. No Storage or persistent image-upload pipeline is configured; the browser-only preview uses Next Image for selected local files.
 
 ## 15. UI and design system
 
@@ -384,6 +419,7 @@ No Jest, Vitest, Playwright or Cypress framework is configured. `.cjs` tests use
 |---|---|---|
 | Dashboard and areas | `tests/broker-dashboard-areas.test.cjs` | `node tests/broker-dashboard-areas.test.cjs`; mock reads, counts, ordering, authorization and writes |
 | Notifications | `tests/broker-notifications.test.cjs`, `tests/sql/broker-notifications.sql` | Mock/static Node checks; SQL script requires disposable database and rolls back |
+| Customers | `tests/customer-validation.test.cjs`, `tests/customer-queries.test.cjs`, `tests/customer-actions.test.cjs`, `tests/customer-schema.test.cjs`, `tests/sql/customer-centric-enquiries.sql` | Node mocks/static checks for normalization, listing, metrics, detail history, edit conflicts, authorization and regression assertions; SQL script requires a disposable database and rolls back |
 | Public action / validation | `tests/public-lead-action.test.cjs` | `node tests/public-lead-action.test.cjs` |
 | RPC static checks | `tests/public-lead-rpc.test.cjs` | `node tests/public-lead-rpc.test.cjs`; no SQL execution |
 | Prehydration render | `tests/contact-prehydration.test.cjs` | `node tests/contact-prehydration.test.cjs` |
@@ -397,9 +433,9 @@ Add action tests with mocked guarded clients and failure cases, then separately 
 
 ## 17. Database migration and seed management
 
-Apply the checked-in migrations in order: `20261107000000_initial_schema.sql` creates the schema and RLS; `20261109000000_public_lead_submission.sql` adds the RPC; `20261110000000_reject_blank_public_lead_property_id.sql` replaces it to reject blank references; `20261111000000_broker_notifications.sql` adds notifications and extends the RPC. Do not rewrite migrations already applied elsewhere. `supabase/seed.sql` contains four areas, nine sample properties and seven demo leads; it is not a production import strategy. No historical notifications are backfilled.
+Apply the checked-in migrations in order: `20261107000000_initial_schema.sql` creates the schema and RLS; `20261109000000_public_lead_submission.sql` adds the RPC; `20261110000000_reject_blank_public_lead_property_id.sql` replaces it to reject blank references; `20261111000000_broker_notifications.sql` adds notifications and extends the RPC; `20261112000000_customer_centric_enquiries.sql` adds phone normalization, customers, the nullable lead link with backfill, the broker summary view, notification customer context and the customer-aware RPC. Do not rewrite migrations already applied elsewhere. `supabase/seed.sql` contains four areas, nine sample properties and seven demo leads; it is not a production import strategy. No historical notifications are backfilled, and the customer migration is not applied or verified by this review.
 
-No `supabase/config.toml` or Supabase CLI package is checked in. Establish CLI and local-stack availability separately. The SQL test includes psql meta-commands and cannot be pasted unchanged into Dashboard SQL Editor. Adapt and review for a disposable environment; rollback test inserts can still consume sequence values. Never run tests against production.
+No `supabase/config.toml` or Supabase CLI package is checked in. Establish CLI and local-stack availability separately. The older SQL tests include psql meta-commands and cannot be pasted unchanged into Dashboard SQL Editor. The customer-centric script uses SQL without psql meta-commands; review it and the target before execution. Rollback test inserts can still consume sequence values. Never run tests against production.
 
 Workflow: identify the intended project and migration state; create a later migration; review SQL, grants, RLS and data impact; test in disposable local/staging; verify roles, application behavior and migration history; obtain the normal production approval; apply only to the intended target; verify and commit. With a separately installed CLI, check its version and help for migration-list and dry-run commands before use. Remote linking and deployment are not established by this repository. Plan a forward fix and recovery; SQL migrations do not automatically undo data changes.
 
@@ -447,7 +483,7 @@ Calling the repository a modular monolith is an inference from its single Next a
 2. **Admin page:** add under `src/app/admin/(dashboard)`; use `requireBroker`, request-bound clients and RLS; add navigation after authorization.
 3. **Property field:** inspect schema/migration, grants, public/broker projections, `database.types.ts`, `broker.types.ts`, mappers, validation, form adapter, UI and tests; classify privacy explicitly.
 4. **Property filter:** change `src/modules/properties/filters.ts`, controls and tests; account for backend response limits.
-5. **Lead field:** review schema/RLS, broker types/mappers/queries, public form and RPC if externally supplied, privacy and tests.
+5. **Lead or customer field:** review schema/RLS, broker types/mappers/queries, the customer link and backfill implications, public form and RPC if externally supplied, privacy and tests.
 6. **Lead status:** add a forward enum migration; update `src/types/lead.ts`, `src/modules/leads/constants.ts`, actions, stats, UI and tests.
 7. **Server Action:** validate all input, guard broker operations, use minimum projections, return safe serializable results and revalidate affected paths.
 8. **Supabase RPC:** add a forward migration with constrained parameters, secure execution context, fixed search path and grants; test direct roles and transaction behavior.
@@ -459,11 +495,11 @@ Calling the repository a modular monolith is an inference from its single Next a
 
 ## 23. Known limitations and technical debt
 
-**Functional:** sample property rows are included in database counts; gallery images are illustrations; uploads are absent; public catalogue has no application pagination; broker inbox uses offset pagination; contact configuration is placeholder.
+**Functional:** sample property rows are included in database counts; gallery images are illustrations; uploads are absent; public catalogue has no application pagination; broker inbox and customer directory use offset pagination; contact configuration is placeholder. Customer matching uses normalized phone only, ambiguous numbers are not merged, and there is no customer merge/delete workflow.
 
 **Security:** the honeypot and one-minute duplicate guard are not comprehensive rate limiting; direct anonymous RPC calls bypass the website honeypot. There is no implemented CAPTCHA or trusted per-IP protection. Duplicate responses can reveal limited recent-submission information. Verify JavaScript-disabled form and streamed HTTP status behavior.
 
-**Operations:** deployment, migration state, backup/restore, monitoring, privacy notice, consent and retention are unverified. **Future enhancements:** image management, external alerts, scalable search and broader browser/database automation need explicit design.
+**Operations:** deployment, migration state, backup/restore, monitoring, privacy notice, consent and retention are unverified. The customer migration, its backfill, RLS, summary view and RPC changes require disposable-database and staging verification. **Future enhancements:** image management, external alerts, scalable search, customer merge/export controls and broader browser/database automation need explicit design.
 
 Documentation maintenance: for changes to architecture, features, workflows, routes, schema, security, integrations, validation, setup, tests, deployment, or limitations, review and update README.md and both guides in the same task as appropriate.
 
@@ -471,7 +507,7 @@ Documentation maintenance: for changes to architecture, features, workflows, rou
 
 - [ ] Understand the single-broker journey and availability/approval/verification distinctions.
 - [ ] Clone, configure a nonproduction environment and run §18 commands.
-- [ ] Read the architecture and ER diagrams and all four migrations.
+- [ ] Read the architecture and ER diagrams and all migrations.
 - [ ] Trace anonymous and request-cookie clients, broker claims, grants and RLS.
 - [ ] Trace a public enquiry through the RPC and a broker lead update through its action.
 - [ ] Run the focused tests and arrange browser and disposable database verification.
@@ -486,12 +522,12 @@ Documentation maintenance: for changes to architecture, features, workflows, rou
 | Supabase clients | `src/lib/supabase/public-server.ts`, `server.ts`, `client.ts`, `proxy.ts` |
 | Broker authorization | `src/lib/auth/broker.ts`, `src/proxy.ts` |
 | Public enquiry action | `src/app/(public)/contact/actions.ts` |
-| Public enquiry RPC | `supabase/migrations/20261109000000_public_lead_submission.sql`, `supabase/migrations/20261110000000_reject_blank_public_lead_property_id.sql`, and `supabase/migrations/20261111000000_broker_notifications.sql` |
-| Database schema and RLS | `supabase/migrations/20261107000000_initial_schema.sql` |
+| Public enquiry RPC | `supabase/migrations/20261109000000_public_lead_submission.sql`, `supabase/migrations/20261110000000_reject_blank_public_lead_property_id.sql`, `supabase/migrations/20261111000000_broker_notifications.sql`, and `supabase/migrations/20261112000000_customer_centric_enquiries.sql` |
+| Database schema and RLS | `supabase/migrations/20261107000000_initial_schema.sql`, `supabase/migrations/20261112000000_customer_centric_enquiries.sql` |
 | Queries and mappers | `src/lib/supabase/queries/`, `src/lib/supabase/mappers/` |
-| Validation | `src/lib/validation/public-lead.ts`, `src/lib/supabase/validation/broker-property-input.ts` |
+| Validation | `src/lib/validation/public-lead.ts`, `src/lib/validation/customer.ts`, `src/lib/supabase/validation/broker-property-input.ts` |
 | Tests | `tests/`, `tests/sql/` |
 | Environment variables | `src/lib/env.ts`, `src/config/site.ts`, `.env.example` |
 | Commands | `package.json`: `dev`, `build`, `start`, `lint`, `typecheck` |
 
-**Glossary:** RLS = PostgreSQL row-level security; RPC = callable database function; DAL = data access layer; UDS = undivided share; `anon` = Supabase anonymous database role; broker = authenticated user with server-controlled broker claim; demo lead = seeded record marked `is_demo` and made read-only by broker application actions.
+**Glossary:** RLS = PostgreSQL row-level security; RPC = callable database function; DAL = data access layer; UDS = undivided share; `anon` = Supabase anonymous database role; broker = authenticated user with server-controlled broker claim; customer = one contact record matched by normalized phone; enquiry = an individual lead linked to a customer; demo lead = seeded record marked `is_demo` and made read-only by broker application actions.

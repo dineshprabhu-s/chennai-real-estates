@@ -1,6 +1,6 @@
 # Chennai Real Estates
 
-A single-broker property catalogue for Madipakkam and nearby Chennai localities. Visitors can browse sale, rent and lease listings, explore areas and send enquiries. An authorized broker can manage property listings and follow up on enquiries.
+A single-broker property catalogue for Madipakkam and nearby Chennai localities. Visitors can browse sale, rent and lease listings, explore areas and send enquiries. An authorized broker can manage property listings, keep one customer record per phone number, and follow up on each independently managed enquiry.
 
 ## Documentation
 
@@ -13,18 +13,22 @@ The application source and checked-in migrations are the source of truth. These 
 
 - Public pages read available and under-offer properties and active areas through a session-independent anonymous Supabase client. Catalogue filters cover locality, transaction, category, configuration, bedrooms, price, facing and keywords.
 - Property details include public listing information, related properties and an enquiry form. General enquiries are available from the contact page; a property enquiry carries an explicit property ID.
-- Enquiries go through a validated Server Action and the `submit_public_lead` database function, which creates a lead, initial activity and persistent broker notification together. Anonymous users do not receive direct lead-table access.
+- Enquiries go through a validated Server Action and the `submit_public_lead` database function, which resolves or creates the customer and creates a lead, initial activity and persistent broker notification together. Anonymous users do not receive direct lead-table access.
+- The same normalized phone number reuses an existing customer. That person can hold several enquiries, each with its own property, message, status, notes and activity history. The public function still returns no customer or lead identifiers.
 - Broker login and admin pages use Supabase Auth, verified broker claims and row-level security. Broker property create, edit and availability updates, and lead status updates and notes, are connected to Supabase. The inbox searches and filters lead history in database-backed pages of 25, with exact matching and overall counts.
+- A broker-only Customers workspace lists customers with server-side search, sorting and 25-row pages, shows repeat-enquiry and activity metrics, and opens a customer's complete enquiry history. Customer name, phone and email can be edited; a phone number already owned by another customer is rejected instead of merging histories. Customers derived only from seeded demo enquiries are read-only.
 - The admin dashboard shows database property counts and recent listings. Brokers can add, edit and activate or deactivate areas. Demo enquiries remain labeled and read-only through the application.
 
 ## Current limitations
 
 - Property illustrations and selected image previews are not uploaded property photographs. Storage and image uploads are not implemented.
-- Seeded sample properties are ordinary database records with no demo marker and are included in property counts. Public catalogue filtering has no application pagination; backend response limits can affect large catalogues. The broker inbox searches full lead history with server-side pagination.
+- Seeded sample properties are ordinary database records with no demo marker and are included in property counts. Public catalogue filtering has no application pagination; backend response limits can affect large catalogues. The broker inbox and customer directory use server-side pagination.
+- Customer identity is matched by phone number only. Names and emails are never used to merge records, ambiguous numbers are not guessed at, and two customers are never merged automatically. A customer derived only from seeded demo enquiries is read-only.
 - Contact details in the site configuration are placeholders. WhatsApp links appear only when configured.
 - The enquiry honeypot and one-minute duplicate guard are not comprehensive abuse protection. The anonymous enquiry function is directly callable; production abuse controls still need a design and verification.
 - JavaScript-disabled enquiry behavior, deployment settings, monitoring, backups, privacy and retention procedures require verification. A streamed missing-detail page may show the not-found UI with HTTP 200.
 - In-app notifications are shared between broker accounts; email, WhatsApp, SMS and push alerts are not implemented. No appointment booking is implemented. Confirm property details, prices and availability with the broker.
+- The customer migration and its RLS, view and RPC changes are checked in but have not been applied or verified against a deployed database in this repository state.
 
 ## Technology
 
@@ -61,6 +65,8 @@ The Supabase settings are validated lazily by `src/lib/env.ts`. Restart the dev 
 | `/areas` and `/areas/[slug]` | `/admin/properties` — property management |
 | `/contact` — general or property-context enquiry | `/admin/properties/new` and `/admin/properties/[id]/edit` |
 | | `/admin/leads` — enquiry inbox |
+| | `/admin/customers` — customer directory |
+| | `/admin/customers/[id]` — customer details and enquiry history |
 | | `/admin/areas` — area management |
 
 `/admin` redirects to the dashboard. Admin pages and actions enforce broker authorization in addition to the route proxy.
@@ -86,6 +92,10 @@ node tests/contact-prehydration.test.cjs
 node tests/lead-history.test.cjs
 node tests/lead-read.test.cjs
 node tests/lead-actions.test.cjs
+node tests/customer-validation.test.cjs
+node tests/customer-queries.test.cjs
+node tests/customer-actions.test.cjs
+node tests/customer-schema.test.cjs
 node tests/property-actions.test.cjs
 node tests/property-form-adapter.test.cjs
 node tests/property-brokerage.test.cjs
@@ -93,11 +103,11 @@ node tests/property-list-refresh.test.cjs
 node tests/property-pages.test.cjs
 ```
 
-These harnesses include mocks and static checks; they do not replace browser or database integration testing. `tests/sql/public-lead-rpc.sql` and `tests/sql/broker-notifications.sql` are separate psql verification scripts for a disposable local or staging database. Review each script and target before running it; do not run test writes against production. Lead-history filtering, related-property search and notification polling still require staging verification.
+These harnesses include mocks and static checks; they do not replace browser or database integration testing. `tests/sql/public-lead-rpc.sql`, `tests/sql/broker-notifications.sql` and `tests/sql/customer-centric-enquiries.sql` are separate verification scripts for a disposable local or staging database. The older scripts use psql commands; the customer script uses SQL compatible with the SQL Editor. Review each script and target before running it; do not run test writes against production. The customer script has not been executed in this repository state. Lead-history filtering, customer search and pagination, related-property search and notification polling still require staging verification.
 
 ## Database and security
 
-The checked-in migrations, including the broker notification migration, are in `supabase/migrations/`; apply and verify them in a nonproduction environment before relying on notifications. `supabase/seed.sql` contains sample data. Do not rewrite an already-applied migration. Confirm the target and migration history before applying a reviewed forward migration, and verify grants and policies in a disposable environment.
+The checked-in migrations, including the broker notification migration and the customer-centric enquiry migration, are in `supabase/migrations/`; apply and verify them in a nonproduction environment before relying on customers or notifications. The latest migration adds a `customers` table, a nullable `leads.customer_id` link, a broker-only summary view, notification customer context and an updated public submission function. It preserves existing lead IDs, statuses, sources, messages, notes, activities and demo markers while creating one customer per normalized phone. `supabase/seed.sql` contains sample data. Do not rewrite an already-applied migration. Confirm the target and migration history before applying a reviewed forward migration, and verify grants and policies in a disposable environment.
 
 Anonymous property reads exclude the private `description`, `address` and `whatsapp_reference` columns. Broker operations use a request-bound client and server-side role checks. Public enquiries use a separate cookie-free anonymous client and a narrow database function. See the [technical overview](docs/TECHNICAL_OVERVIEW.md) for the full access model, migration notes and known operational gaps.
 

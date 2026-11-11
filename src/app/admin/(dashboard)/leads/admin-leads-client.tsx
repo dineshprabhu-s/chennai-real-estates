@@ -3,6 +3,7 @@
 import {
   CalendarCheck,
   CheckCircle2,
+  ContactRound,
   Eye,
   Handshake,
   Inbox,
@@ -554,6 +555,19 @@ export function AdminLeadsClient({
               {selectedLead.isDemo ? (
                 <Badge variant="outline">Seeded demo enquiry</Badge>
               ) : null}
+              {selectedLead.customerId ? (
+                <Button asChild variant="outline" size="sm">
+                  <Link
+                    href={`/admin/customers/${selectedLead.customerId}`}
+                    onClick={() => setSelectedId(null)}
+                  >
+                    <ContactRound aria-hidden="true" />
+                    Existing customer
+                  </Link>
+                </Button>
+              ) : (
+                <Badge variant="outline">No customer record</Badge>
+              )}
             </div>
 
             <section>

@@ -53,11 +53,16 @@ export function mapBrokerLead(
   noteRows: BrokerLeadNoteRow[] = [],
   activityRows: BrokerLeadActivityRow[] = [],
 ): BrokerLead {
+  const customer = row.customers;
+
   return {
     id: row.id,
-    name: row.name,
-    phone: row.phone,
-    email: row.email,
+    customerId: row.customer_id,
+    // Contact details follow the current customer record so broker edits are
+    // reflected in every enquiry. The enquiry message itself stays historical.
+    name: customer?.name ?? row.name,
+    phone: customer?.phone ?? row.phone,
+    email: customer?.email ?? row.email,
     message: row.message,
     propertyId: row.property_id,
     status: row.status,

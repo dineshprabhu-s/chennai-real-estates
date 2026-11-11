@@ -140,7 +140,7 @@ const queries = load(sourcePath, {
   '@/modules/leads/constants': constants,
 });
 
-const leadColumns = 'id,name,phone,email,message,property_id,status,created_at,source,is_demo,updated_at';
+const leadColumns = 'id,name,phone,email,message,property_id,customer_id,customers(name,phone,email),status,created_at,source,is_demo,updated_at';
 const statuses = ['new', 'contacted', 'visit-scheduled', 'negotiation', 'converted', 'closed-lost'];
 
 function lead(id, status, createdAt, extra = {}) {
@@ -199,6 +199,22 @@ async function main() {
 
   const demoMapped = mapper.mapBrokerLead(lead('LEAD-1001', 'new', '2026-11-06T03:45:00+00:00', { is_demo: true }));
   assert.equal(demoMapped.isDemo, true);
+
+  // Current customer contact fields win over the historical enquiry snapshot,
+  // while the enquiry message itself is never rewritten.
+  const customerMapped = mapper.mapBrokerLead(
+    lead('LEAD-2002', 'new', '2026-11-08T04:00:00+00:00', {
+      customer_id: 'CUST-0001',
+      customers: { name: 'Current Customer', phone: '9000011111', email: 'current@example.com' },
+    }),
+  );
+  assert.equal(customerMapped.customerId, 'CUST-0001');
+  assert.equal(customerMapped.name, 'Current Customer');
+  assert.equal(customerMapped.phone, '9000011111');
+  assert.equal(customerMapped.email, 'current@example.com');
+  assert.equal(customerMapped.message, 'Please share more details about this property.');
+  assert.equal(customerMapped.createdAt, '2026-11-08T04:00:00+00:00');
+  assert.equal(mapper.mapBrokerLead(lead('LEAD-2003', 'new', '2026-11-08T04:00:00+00:00')).customerId, undefined);
   assert.equal(mapper.mapBrokerLeadNote(note('17', 'LEAD-1001', '2026-11-06T04:00:00+00:00')).id, '17');
   assert.equal(mapper.mapBrokerLeadActivity(activity('ACT-9', 'LEAD-1001', '2026-11-06T04:00:00+00:00', 'Called', 'Left a message')).detail, 'Left a message');
 
