@@ -18,6 +18,7 @@ The application source and checked-in migrations are the source of truth. These 
 - Broker login and admin pages use Supabase Auth, verified broker claims and row-level security. Broker property create, edit and availability updates, and lead status updates and notes, are connected to Supabase. The inbox searches and filters lead history in database-backed pages of 25, with exact matching and overall counts.
 - A broker-only Customers workspace lists customers with server-side search, sorting and 25-row pages, shows repeat-enquiry and activity metrics, and opens a customer's complete enquiry history. Customer name, phone and email can be edited; a phone number already owned by another customer is rejected instead of merging histories. Customers derived only from seeded demo enquiries are read-only.
 - The admin dashboard shows database property counts and recent listings. Brokers can add, edit and activate or deactivate areas. Demo enquiries remain labeled and read-only through the application.
+- A forward database migration defines a closed-deals and brokerage-collection ledger: one deal per converted lead, agreed and expected brokerage in INR, append-only payments, derived payment status, broker-only row-level security and broker-only summary/monthly views. There is no deal, payment or financial-reporting screen yet.
 
 ## Current limitations
 
@@ -29,6 +30,8 @@ The application source and checked-in migrations are the source of truth. These 
 - JavaScript-disabled enquiry behavior, deployment settings, monitoring, backups, privacy and retention procedures require verification. A streamed missing-detail page may show the not-found UI with HTTP 200.
 - In-app notifications are shared between broker accounts; email, WhatsApp, SMS and push alerts are not implemented. No appointment booking is implemented. Confirm property details, prices and availability with the broker.
 - The customer migration and its RLS, view and RPC changes are checked in but have not been applied or verified against a deployed database in this repository state.
+- The brokerage accounting migration is checked in but has not been applied or executed anywhere in this repository state. Deals and payments have no interface, invoice/GST handling, bank integration, dashboard or notification workflow. Payments are append-only; a controlled reversal/void process and historical correction workflow are not designed. API grants expose neither deal nor payment deletion, and payment correction is blocked by the append-only trigger.
+- Brokerage monthly reporting groups collections by the payment date in Asia/Kolkata. A payment collected in a later month appears in that month, not in the deal's closing month. Real multi-session concurrency of the overpayment guard is documented but has not been tested.
 
 ## Technology
 
@@ -96,6 +99,7 @@ node tests/customer-validation.test.cjs
 node tests/customer-queries.test.cjs
 node tests/customer-actions.test.cjs
 node tests/customer-schema.test.cjs
+node tests/brokerage-schema.test.cjs
 node tests/property-actions.test.cjs
 node tests/property-form-adapter.test.cjs
 node tests/property-brokerage.test.cjs
@@ -103,11 +107,11 @@ node tests/property-list-refresh.test.cjs
 node tests/property-pages.test.cjs
 ```
 
-These harnesses include mocks and static checks; they do not replace browser or database integration testing. `tests/sql/public-lead-rpc.sql`, `tests/sql/broker-notifications.sql` and `tests/sql/customer-centric-enquiries.sql` are separate verification scripts for a disposable local or staging database. The older scripts use psql commands; the customer script uses SQL compatible with the SQL Editor. Review each script and target before running it; do not run test writes against production. The customer script has not been executed in this repository state. Lead-history filtering, customer search and pagination, related-property search and notification polling still require staging verification.
+These harnesses include mocks and static checks; they do not replace browser or database integration testing. `tests/sql/public-lead-rpc.sql`, `tests/sql/broker-notifications.sql`, `tests/sql/customer-centric-enquiries.sql` and `tests/sql/brokerage-accounting.sql` are separate verification scripts for a disposable local or staging database. The older scripts use psql commands; the customer and brokerage scripts use SQL compatible with the SQL Editor. Review each script and target before running it; do not run test writes against production. The customer and brokerage scripts have not been executed in this repository state. Lead-history filtering, customer search and pagination, related-property search, notification polling and real multi-session payment concurrency still require staging verification.
 
 ## Database and security
 
-The checked-in migrations, including the broker notification migration and the customer-centric enquiry migration, are in `supabase/migrations/`; apply and verify them in a nonproduction environment before relying on customers or notifications. The latest migration adds a `customers` table, a nullable `leads.customer_id` link, a broker-only summary view, notification customer context and an updated public submission function. It preserves existing lead IDs, statuses, sources, messages, notes, activities and demo markers while creating one customer per normalized phone. `supabase/seed.sql` contains sample data. Do not rewrite an already-applied migration. Confirm the target and migration history before applying a reviewed forward migration, and verify grants and policies in a disposable environment.
+The checked-in migrations, including the broker notification, customer-centric enquiry and brokerage accounting migrations, are in `supabase/migrations/`; apply and verify them in a nonproduction environment before relying on customers, notifications, deals or payments. The customer migration adds a `customers` table, a nullable `leads.customer_id` link, a broker-only summary view, notification customer context and an updated public submission function. The later brokerage migration adds `deals`, `brokerage_payments`, two enums, validation and append-only triggers, broker-only RLS, least-privilege column grants and two `security_invoker` reporting views. It enforces one deal per converted lead, lead/customer/property matching with frozen associations at deal creation, non-negative INR amounts, derived payment status, explicit cancellation and a locked overpayment check. `supabase/seed.sql` contains sample data. Do not rewrite an already-applied migration. Confirm the target and migration history before applying a reviewed forward migration, and verify grants and policies in a disposable environment.
 
 Anonymous property reads exclude the private `description`, `address` and `whatsapp_reference` columns. Broker operations use a request-bound client and server-side role checks. Public enquiries use a separate cookie-free anonymous client and a narrow database function. See the [technical overview](docs/TECHNICAL_OVERVIEW.md) for the full access model, migration notes and known operational gaps.
 

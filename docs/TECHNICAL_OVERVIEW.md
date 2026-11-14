@@ -1,12 +1,12 @@
 # Chennai Real Estates: technical overview
 
-**Purpose:** engineering onboarding and maintenance reference. **Repository review:** 2026-11-11, on `main` at committed checkpoint `c362bdec76a38ce49595219a0cbec6e59c060330` plus the uncommitted lead-history and customer-centric enquiry changes. This review does not verify staging or production state.
+**Purpose:** engineering onboarding and maintenance reference. **Repository review:** 2026-11-12, on `main` at committed checkpoint `08bd243` plus uncommitted brokerage accounting changes. This review does not verify staging or production state.
 
 This documents checked-in source and SQL, not the state of a deployed database. Source code and migrations are authoritative; update this guide when architecture, schema, authorization, security, or major workflows change. The discarded phone-rate-limit experiment is not implemented.
 
 ## 1. Project introduction
 
-This is a single-broker property platform centered on Madipakkam and nearby Chennai areas. Visitors browse listings and locality guides, then contact the broker. The intended journey is visitor → catalogue → detail → enquiry → broker inbox → customer contact → site visit → follow-up. The application records enquiries and status; scheduling, verification, and transactions still require people.
+This is a single-broker property platform centered on Madipakkam and nearby Chennai areas. Visitors browse listings and locality guides, then contact the broker. The intended journey is visitor → catalogue → detail → enquiry → broker inbox → customer contact → site visit → follow-up. The application records enquiries and status; scheduling, verification, and transactions still require people. A forward migration adds a database-only closed-deals and brokerage-collection ledger; no deal or payment interface is implemented.
 
 A **listing** advertises a property; **resale** means an existing property being sold, rather than a separate database transaction type. **Lease** is one of sale/rent/lease; exact financial terms require broker confirmation. **Brokerage** is the broker's fee, represented as independent free text and optional structured terms. A **customer** is one person or contact number identified by normalized phone; a **lead** or **enquiry** is one potential request attached to that customer and may carry its own property, message and status. A **site visit** is an offline event. Availability status, legal approval, and broker verification are separate concepts (§6).
 
@@ -102,13 +102,17 @@ Pages are Server Components by default; forms, controls, dialogs and responsive 
 
 ## 6. Core business domain and data model
 
-Source of truth: `supabase/migrations/20261107000000_initial_schema.sql`. `N` means nullable; other columns are `NOT NULL`. Defaults and constraints below are SQL-level. Database fields are snake_case; mappers produce camelCase domain objects.
+Source of truth: the checked-in migrations under `supabase/migrations/`, principally `20261107000000_initial_schema.sql`, `20261112000000_customer_centric_enquiries.sql` and `20261112000001_brokerage_accounting.sql`. `N` means nullable; other columns are `NOT NULL`. Defaults and constraints below are SQL-level. Database fields are snake_case; mappers produce camelCase domain objects.
 
 ```mermaid
 erDiagram
   AREAS ||--o{ PROPERTIES : area_slug
   PROPERTIES o|--o{ LEADS : property_id
   CUSTOMERS o|--o{ LEADS : customer_id
+  CUSTOMERS ||--o{ DEALS : customer_id
+  PROPERTIES ||--o{ DEALS : property_id
+  LEADS ||--o| DEALS : lead_id
+  DEALS ||--o{ BROKERAGE_PAYMENTS : deal_id
   LEADS ||--o{ LEAD_NOTES : lead_id
   LEADS ||--o{ LEAD_ACTIVITIES : lead_id
   LEADS o|--o| BROKER_NOTIFICATIONS : lead_id
@@ -208,6 +212,38 @@ The customer migration backfills `leads.customer_id` by grouping existing leads 
 
 `public.broker_customer_summary` is `security_invoker`, so customer and lead RLS still apply. It exposes current customer fields plus `enquiry_count`, `active_enquiry_count` (new, contacted, visit-scheduled or negotiation), `latest_enquiry_at`, `is_demo` (true only when every linked enquiry is demo) and the latest activity label/time. It is granted to `authenticated` only; anonymous users have no grant.
 
+### Deals and brokerage payments
+
+Source: `supabase/migrations/20261112000001_brokerage_accounting.sql`. This is a database-only foundation; no application screen, invoice generation, GST/tax logic, bank integration, financial dashboard or deal notification is implemented.
+
+`public.deals` records one finalized property transaction per converted lead. `id` uses the existing `DEAL-` business-ID convention. `lead_id` is unique, so a second deal for the same lead is rejected by the database. `customer_id` and `property_id` are required and, when the deal is created, must match the converted lead's linked customer and property; a converted general enquiry without a property cannot become a deal. Those three associations are then immutable, so later lead edits do not change the deal. All three foreign keys are `on update cascade on delete restrict`, so financial history blocks parent deletion rather than cascading.
+
+| Column | Type / default | Constraint or meaning |
+|---|---|---|
+| `id` | text, sequence-generated | PK; `DEAL-` ID, nonblank |
+| `lead_id` | text | Unique FK to leads; delete restrict |
+| `customer_id`, `property_id` | text | Required FKs to customers/properties; delete restrict; must match the lead at creation |
+| `transaction_amount` | numeric(14,2) | Required; INR; greater than zero |
+| `expected_brokerage` | numeric(14,2), N | Initial estimate; null or non-negative |
+| `agreed_brokerage` | numeric(14,2) | Required; non-negative; not above `transaction_amount` |
+| `invoice_number` | text, N | Optional; nonblank when present |
+| `closing_date` | date | Required transaction closing date |
+| `status` | `deal_status` default `pending` | Stored payment state; non-cancelled values are derived |
+| `notes` | text, N | Internal note; nonblank when present |
+| `created_at`, `updated_at` | timestamptz default `now()` | `updated_at` maintained by trigger |
+
+`public.brokerage_payments` stores actual money received. `id` uses `PAY-`. `amount` is INR `numeric(14,2)` and must be greater than zero. `payment_date` is a required `timestamptz` with no default, so the broker records the actual collection time rather than relying on insertion time. `payment_method` is `cash`, `upi`, `bank_transfer`, `cheque` or `other`. `receipt_number`, `payment_reference` and `notes` are optional and nonblank when present; receipt numbers are deliberately not unique because one receipt may cover multiple installments. The deal foreign key is delete restrict, so payment history cannot be cascaded away.
+
+**Derived status.** A `validate_deal` trigger rejects a non-cancelled status that does not match the collected total: no payments → `pending`, some but less than agreed → `partially_paid`, at least agreed → `fully_paid`. An `after insert` payment trigger refreshes the stored status. Manual attempts to mark a deal `fully_paid` below the agreed total, or to reduce `agreed_brokerage` below money already collected, are rejected. `cancelled` is explicit, allowed only before any payment, and cannot be reopened. A zero agreed brokerage derives to `fully_paid`, so such a deal must be created with that status rather than the default `pending`.
+
+**Append-only payments.** Grants give `authenticated` only `select` and `insert` on payments, and a trigger rejects all updates and deletes with SQLSTATE `P0007`, including direct privileged edits. A controlled reversal/void mechanism is deferred; a wrong payment currently requires a forward design rather than rewriting history. No browser or service role receives `delete` or `truncate` on deals or payments, and payments receive no `update` grant.
+
+**Overpayment concurrency.** The payment insert trigger locks the parent deal row with `select ... for update` before summing existing payments. Concurrent inserts for one deal serialize, and a payment that would overpay is rejected even when two submissions each fit individually. The sum runs in a later statement after the lock, so under the Supabase default READ COMMITTED isolation it sees the committed earlier payment. Under REPEATABLE READ the second transaction may abort instead. The checked-in SQL test is sequential; real multi-session concurrency has not been executed.
+
+**Relationships captured at creation.** The converted-status, customer and property checks run only when a deal is created. This phase deliberately does not add a trigger to the existing lead workflow, so a later lead status change does not invalidate or block maintenance of an existing deal. The deal update path does not read the lead at all: it enforces that `lead_id`, `customer_id` and `property_id` are unchanged and then validates payments and status. Editing a lead's `customer_id` or `property_id` after the deal exists therefore cannot break notes updates or payment recording, and the deal keeps the associations captured at creation. The database does not propagate that lead drift into the deal; application-layer enforcement would be a future addition.
+
+**Reporting views.** `broker_deal_summary` joins the deal, customer, property and payment totals to expose collected and pending brokerage, payment count and latest payment time. `broker_brokerage_monthly` groups collections by `date_trunc('month', payment_date at time zone 'Asia/Kolkata')`, never by `closing_date`; a payment collected in a later month belongs to that later month. Both views are `security_invoker` and granted to `authenticated` only, so broker RLS on the underlying tables remains the boundary. Anonymous users have no grant.
+
 `MAD-...` and `LEAD-...` are business IDs; Auth user IDs belong to Supabase Auth. There is no image table in these migrations.
 
 ### Enum data dictionary
@@ -225,8 +261,10 @@ The customer migration backfills `leads.customer_id` by grouping existing leads 
 | `verification_status` | `sample`, `broker-confirmed` |
 | `lead_status` | `new`, `contacted`, `visit-scheduled`, `negotiation`, `converted`, `closed-lost` |
 | `lead_source` | `website-form`, `property-enquiry`, `whatsapp`, `phone` |
+| `deal_status` | `pending`, `partially_paid`, `fully_paid`, `cancelled` |
+| `payment_method` | `cash`, `upi`, `bank_transfer`, `cheque`, `other` |
 
-Indexes: `properties_area_slug_idx`, `properties_status_idx`, partial `properties_public_browse_idx`, partial `properties_public_featured_idx`, `properties_updated_at_idx`, partial `areas_active_idx`, `leads_status_idx`, `leads_created_at_idx`, `leads_property_id_idx`, `leads_customer_created_idx`, `lead_notes_lead_created_idx`, `lead_activities_lead_occurred_idx`, and PK/unique indexes including the customer normalized-phone key. Areas and leads use timestamp updated-at triggers; properties use a date trigger; customers use a timestamp trigger. Exact check names and RLS policies are in the migrations; access is summarized in §9.
+Indexes: `properties_area_slug_idx`, `properties_status_idx`, partial `properties_public_browse_idx`, partial `properties_public_featured_idx`, `properties_updated_at_idx`, partial `areas_active_idx`, `leads_status_idx`, `leads_created_at_idx`, `leads_property_id_idx`, `leads_customer_created_idx`, `lead_notes_lead_created_idx`, `lead_activities_lead_occurred_idx`, `deals_customer_idx`, `deals_property_idx`, `deals_closing_date_idx`, `deals_status_idx`, `brokerage_payments_deal_paid_idx`, `brokerage_payments_payment_date_idx`, and PK/unique indexes including the customer normalized-phone key and the deal lead key. Areas, leads, customers and deals use timestamp updated-at triggers; properties use a date trigger. Exact check names and RLS policies are in the migrations; access is summarized in §9.
 
 ## 7. Supabase integration architecture
 
@@ -276,7 +314,7 @@ sequenceDiagram
 
 ## 9. Database security and row-level security
 
-The five original tables and the broker notification and customer tables have RLS. `public.is_broker()` is security-invoker, has an empty search path, and checks JWT `app_metadata.role`; authenticated users may execute it. Grants permit operations, policies restrict rows.
+The five original tables plus the broker notification, customer, deal and brokerage-payment tables have RLS. `public.is_broker()` is security-invoker, has an empty search path, and checks JWT `app_metadata.role`; authenticated users may execute it. Grants permit operations, policies restrict rows.
 
 | Resource | Anonymous | Authenticated non-broker | Authenticated broker |
 |---|---|---|---|
@@ -287,9 +325,12 @@ The five original tables and the broker notification and customer tables have RL
 | `broker_customer_summary` view | No grant | No matching policy | Select under invoker RLS |
 | Lead/note/activity tables | No direct access | No matching policy | CRUD under broker policies |
 | Broker notifications | No direct access | No matching policy | Read and update read timestamp only |
+| Deals | No access | No matching policy | Read and insert; update only mutable columns; no delete grant |
+| Brokerage payments | No access | No matching policy | Read and insert only; update/delete blocked by grants and trigger |
+| `broker_deal_summary`, `broker_brokerage_monthly` views | No grant | No matching policy | Select under invoker RLS |
 | `submit_public_lead` | Execute | No execute grant | No authenticated execute grant; public client remains anon |
 
-Authenticated table CRUD grants are constrained by broker policies with `USING` and `WITH CHECK`. Anonymous has no direct lead-table, customer-table or sequence grants. Authenticated receives usage on property, lead and note sequences, but not the customer sequence: only the security-definer RPC creates customers. The customer update grant exists because brokers edit the current name, phone and email; the generated normalized-phone column still enforces uniqueness. The RPC is owned by `postgres`, `SECURITY DEFINER`, `RETURNS void`, has empty `search_path` and explicit execute grants/revokes. `normalize_customer_phone` is executable by `authenticated` only so a broker phone update can recalculate the generated column.
+Authenticated table CRUD grants are constrained by broker policies with `USING` and `WITH CHECK`. Anonymous has no direct lead-table, customer-table, financial-table or sequence grants. Authenticated receives usage on property, lead and note sequences, but not the customer sequence: only the security-definer RPC creates customers. The brokerage migration grants usage on the deal and payment sequences and limits deal updates to `transaction_amount`, `expected_brokerage`, `agreed_brokerage`, `invoice_number`, `closing_date`, `status` and `notes`; identity, associations and timestamps are not granted and are also guarded by trigger. `service_role` loses DELETE and TRUNCATE on deals and UPDATE, DELETE and TRUNCATE on payments; the append-only trigger still blocks payment mutation even for privileged direct edits. The customer update grant exists because brokers edit the current name, phone and email; the generated normalized-phone column still enforces uniqueness. The RPC is owned by `postgres`, `SECURITY DEFINER`, `RETURNS void`, has empty `search_path` and explicit execute grants/revokes. `normalize_customer_phone` is executable by `authenticated` only so a broker phone update can recalculate the generated column.
 
 Publicly granted property columns: `id`, `slug`, `title`, `summary`, `public_description`, `type`, `configuration`, `listing_type`, `status`, `price`, `price_negotiable`, `bedrooms`, `bathrooms`, `built_up_area_sqft`, `carpet_area_sqft`, `uds_sqft`, `floor`, `facing`, `building_age_years`, `has_lift`, `parking`, `furnishing`, `approval_status`, `brokerage`, `brokerage_type`, `brokerage_value`, `availability_note`, `landmark`, `total_floors`, `security_deposit`, `last_verified_at`, `area_slug`, `locality`, `features`, `is_featured`, `verification_status`, `listed_at`, `updated_at`. Private `description`, `address` and `whatsapp_reference` are omitted from grants and queries. `mapPublicProperty` maps `public_description` to domain `description`.
 
@@ -420,6 +461,7 @@ No Jest, Vitest, Playwright or Cypress framework is configured. `.cjs` tests use
 | Dashboard and areas | `tests/broker-dashboard-areas.test.cjs` | `node tests/broker-dashboard-areas.test.cjs`; mock reads, counts, ordering, authorization and writes |
 | Notifications | `tests/broker-notifications.test.cjs`, `tests/sql/broker-notifications.sql` | Mock/static Node checks; SQL script requires disposable database and rolls back |
 | Customers | `tests/customer-validation.test.cjs`, `tests/customer-queries.test.cjs`, `tests/customer-actions.test.cjs`, `tests/customer-schema.test.cjs`, `tests/sql/customer-centric-enquiries.sql` | Node mocks/static checks for normalization, listing, metrics, detail history, edit conflicts, authorization and regression assertions; SQL script requires a disposable database and rolls back |
+| Brokerage accounting | `tests/brokerage-schema.test.cjs`, `tests/sql/brokerage-accounting.sql` | Node static checks for deal/payment schema, constraints, append-only payments, grants, RLS and payment-date reporting; SQL script requires a disposable database and rolls back and also covers lead-drift updates, association immutability, zero agreed brokerage and delta-based monthly totals. The SQL script is sequential; real multi-session concurrency remains unverified |
 | Public action / validation | `tests/public-lead-action.test.cjs` | `node tests/public-lead-action.test.cjs` |
 | RPC static checks | `tests/public-lead-rpc.test.cjs` | `node tests/public-lead-rpc.test.cjs`; no SQL execution |
 | Prehydration render | `tests/contact-prehydration.test.cjs` | `node tests/contact-prehydration.test.cjs` |
@@ -433,9 +475,9 @@ Add action tests with mocked guarded clients and failure cases, then separately 
 
 ## 17. Database migration and seed management
 
-Apply the checked-in migrations in order: `20261107000000_initial_schema.sql` creates the schema and RLS; `20261109000000_public_lead_submission.sql` adds the RPC; `20261110000000_reject_blank_public_lead_property_id.sql` replaces it to reject blank references; `20261111000000_broker_notifications.sql` adds notifications and extends the RPC; `20261112000000_customer_centric_enquiries.sql` adds phone normalization, customers, the nullable lead link with backfill, the broker summary view, notification customer context and the customer-aware RPC. Do not rewrite migrations already applied elsewhere. `supabase/seed.sql` contains four areas, nine sample properties and seven demo leads; it is not a production import strategy. No historical notifications are backfilled, and the customer migration is not applied or verified by this review.
+Apply the checked-in migrations in order: `20261107000000_initial_schema.sql` creates the schema and RLS; `20261109000000_public_lead_submission.sql` adds the RPC; `20261110000000_reject_blank_public_lead_property_id.sql` replaces it to reject blank references; `20261111000000_broker_notifications.sql` adds notifications and extends the RPC; `20261112000000_customer_centric_enquiries.sql` adds phone normalization, customers, the nullable lead link with backfill, the broker summary view, notification customer context and the customer-aware RPC; `20261112000001_brokerage_accounting.sql` adds deal/payment enums, sequences, tables, validation and append-only triggers, broker RLS and grants, and the two `security_invoker` reporting views. Do not rewrite migrations already applied elsewhere. `supabase/seed.sql` contains four areas, nine sample properties and seven demo leads; it is not a production import strategy. No historical notifications are backfilled. Neither the customer migration nor the brokerage migration was applied or verified by this review, and the brokerage migration was not executed here.
 
-No `supabase/config.toml` or Supabase CLI package is checked in. Establish CLI and local-stack availability separately. The older SQL tests include psql meta-commands and cannot be pasted unchanged into Dashboard SQL Editor. The customer-centric script uses SQL without psql meta-commands; review it and the target before execution. Rollback test inserts can still consume sequence values. Never run tests against production.
+No `supabase/config.toml` or Supabase CLI package is checked in. Establish CLI and local-stack availability separately. The older SQL tests include psql meta-commands and cannot be pasted unchanged into Dashboard SQL Editor. The customer-centric and brokerage scripts use SQL without psql meta-commands; review them and the target before execution. Rollback test inserts can still consume sequence values. The brokerage script is sequential; its documented multi-session overpayment procedure requires two separate sessions. Never run tests against production.
 
 Workflow: identify the intended project and migration state; create a later migration; review SQL, grants, RLS and data impact; test in disposable local/staging; verify roles, application behavior and migration history; obtain the normal production approval; apply only to the intended target; verify and commit. With a separately installed CLI, check its version and help for migration-list and dry-run commands before use. Remote linking and deployment are not established by this repository. Plan a forward fix and recovery; SQL migrations do not automatically undo data changes.
 
@@ -461,6 +503,7 @@ npm run build
 npm run start
 node tests/public-lead-action.test.cjs
 node tests/public-lead-rpc.test.cjs
+node tests/brokerage-schema.test.cjs
 ```
 
 Run other tests individually as listed in §16. `npm run start` serves an existing build. Google font fetching may require build-time network access.
@@ -495,11 +538,11 @@ Calling the repository a modular monolith is an inference from its single Next a
 
 ## 23. Known limitations and technical debt
 
-**Functional:** sample property rows are included in database counts; gallery images are illustrations; uploads are absent; public catalogue has no application pagination; broker inbox and customer directory use offset pagination; contact configuration is placeholder. Customer matching uses normalized phone only, ambiguous numbers are not merged, and there is no customer merge/delete workflow.
+**Functional:** sample property rows are included in database counts; gallery images are illustrations; uploads are absent; public catalogue has no application pagination; broker inbox and customer directory use offset pagination; contact configuration is placeholder. Customer matching uses normalized phone only, ambiguous numbers are not merged, and there is no customer merge/delete workflow. Deals and brokerage payments are a database-only foundation: there is no deal or payment screen, invoice generation, GST/tax handling, bank reconciliation, financial dashboard or deal notification. Payments are append-only; a controlled reversal/void process for corrections is not designed.
 
 **Security:** the honeypot and one-minute duplicate guard are not comprehensive rate limiting; direct anonymous RPC calls bypass the website honeypot. There is no implemented CAPTCHA or trusted per-IP protection. Duplicate responses can reveal limited recent-submission information. Verify JavaScript-disabled form and streamed HTTP status behavior.
 
-**Operations:** deployment, migration state, backup/restore, monitoring, privacy notice, consent and retention are unverified. The customer migration, its backfill, RLS, summary view and RPC changes require disposable-database and staging verification. **Future enhancements:** image management, external alerts, scalable search, customer merge/export controls and broader browser/database automation need explicit design.
+**Operations:** deployment, migration state, backup/restore, monitoring, privacy notice, consent and retention are unverified. The customer migration and the brokerage migration, including their backfills, triggers, RLS, views and RPC changes, require disposable-database and staging verification. The overpayment row-lock guarantee is documented for READ COMMITTED; real multi-session concurrency has not been executed, and under REPEATABLE READ the second transaction may abort rather than overpay. Deal creation requires a converted lead with matching customer and property, and those associations are immutable afterwards. The deal update path does not re-read the lead, so a later lead status change or lead customer/property edit neither blocks deal maintenance nor alters the deal; it keeps the association captured at creation. **Future enhancements:** image management, external alerts, scalable search, customer merge/export controls, deal/payment UI, controlled payment reversal, invoicing/GST and broader browser/database automation need explicit design.
 
 Documentation maintenance: for changes to architecture, features, workflows, routes, schema, security, integrations, validation, setup, tests, deployment, or limitations, review and update README.md and both guides in the same task as appropriate.
 
@@ -523,11 +566,11 @@ Documentation maintenance: for changes to architecture, features, workflows, rou
 | Broker authorization | `src/lib/auth/broker.ts`, `src/proxy.ts` |
 | Public enquiry action | `src/app/(public)/contact/actions.ts` |
 | Public enquiry RPC | `supabase/migrations/20261109000000_public_lead_submission.sql`, `supabase/migrations/20261110000000_reject_blank_public_lead_property_id.sql`, `supabase/migrations/20261111000000_broker_notifications.sql`, and `supabase/migrations/20261112000000_customer_centric_enquiries.sql` |
-| Database schema and RLS | `supabase/migrations/20261107000000_initial_schema.sql`, `supabase/migrations/20261112000000_customer_centric_enquiries.sql` |
+| Database schema and RLS | `supabase/migrations/20261107000000_initial_schema.sql`, `supabase/migrations/20261112000000_customer_centric_enquiries.sql`, `supabase/migrations/20261112000001_brokerage_accounting.sql` |
 | Queries and mappers | `src/lib/supabase/queries/`, `src/lib/supabase/mappers/` |
 | Validation | `src/lib/validation/public-lead.ts`, `src/lib/validation/customer.ts`, `src/lib/supabase/validation/broker-property-input.ts` |
 | Tests | `tests/`, `tests/sql/` |
 | Environment variables | `src/lib/env.ts`, `src/config/site.ts`, `.env.example` |
 | Commands | `package.json`: `dev`, `build`, `start`, `lint`, `typecheck` |
 
-**Glossary:** RLS = PostgreSQL row-level security; RPC = callable database function; DAL = data access layer; UDS = undivided share; `anon` = Supabase anonymous database role; broker = authenticated user with server-controlled broker claim; customer = one contact record matched by normalized phone; enquiry = an individual lead linked to a customer; demo lead = seeded record marked `is_demo` and made read-only by broker application actions.
+**Glossary:** RLS = PostgreSQL row-level security; RPC = callable database function; DAL = data access layer; UDS = undivided share; `anon` = Supabase anonymous database role; broker = authenticated user with server-controlled broker claim; customer = one contact record matched by normalized phone; enquiry = an individual lead linked to a customer; demo lead = seeded record marked `is_demo` and made read-only by broker application actions; deal = one finalized property transaction created from a converted lead; brokerage payment = one actual append-only collection recorded against a deal, not an invoice or a promise to pay.

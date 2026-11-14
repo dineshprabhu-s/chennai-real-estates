@@ -261,7 +261,7 @@ The details view shows contact information, source, created date, interested pro
 | **Contacted** | The customer has been contacted. |
 | **Visit scheduled** | A visit has been arranged with the customer. |
 | **Negotiation** | Price or terms are being discussed. |
-| **Converted** | The enquiry became a completed deal. |
+| **Converted** | The enquiry became a completed deal; recording the deal and brokerage is not yet available in the interface. |
 | **Closed / lost** | The enquiry did not proceed. |
 
 To update a non-demo enquiry, open it and select a value under **Lead status**. The website saves the selection; there is no separate Save button for this control. Wait for the saving indicator and feedback, then check the status. A conflicting or failed update asks you to refresh or retry. An activity entry is normally added; if the status saved but the history entry could not be recorded, the website reports a warning. A status is a record of your work, not an automatic customer notification or property-status change.
@@ -273,6 +273,14 @@ Open **Customers** to see one broker-side record per normalized phone number. Th
 Select **Open** (or **Open customer** on a smaller screen) to see a customer's current contact details and complete enquiry history. Enquiries are listed newest first. Each one keeps its own enquiry ID, status, source, date, interested property, original message, internal notes and activity history. **Open enquiry** opens that individual enquiry in the existing **Leads / Enquiries** workspace, where its status and notes are managed; **Open all enquiries** opens the full enquiry list.
 
 To correct a customer's name, phone or email, change the fields under **Customer details** and select **Save customer**. The phone number is how future enquiries are matched to this customer, so enter the number the customer actually uses. If the number already belongs to another customer, the save is rejected rather than combining the two histories. Changing a phone number never merges enquiries, rewrites an original message or changes any enquiry's status. A customer created only from seeded demo enquiries is read-only; a customer with any real enquiry can be edited. If the save message says the details were saved but some pages could not be refreshed, refresh before assuming a display is current.
+
+### Closed deals and brokerage collection (not yet available in the interface)
+
+The project files include a database foundation for recording a closed property transaction and the brokerage actually collected, but no screen uses it yet. The admin area has no deal form, payment form, invoice, financial dashboard or automatic status update.
+
+The intended rules, once a screen exists, are: one deal per converted enquiry; the deal keeps the customer and property it was created with, even if the enquiry is later edited; amounts are in INR; a deal cannot be marked fully paid before recorded payments reach the agreed brokerage; a zero agreed brokerage deal starts fully paid and cannot accept a payment; payments are append-only, so a mistaken entry cannot be edited or deleted and needs a designed correction process; a deal can be cancelled only before any payment and cannot be reopened; and monthly revenue counts the date money was received, not the deal closing date.
+
+Until this is built, keep deal and collection records in your existing manual or accounting process. Do not treat the database tables as a working ledger interface.
 
 ### 17. Notes and activity history
 
@@ -322,6 +330,8 @@ flowchart TD
 | Lease | An arrangement for a period under agreed terms; ask the broker about payment. |
 | Resale | A property offered for sale by an existing owner. |
 | Brokerage | The broker's service fee, subject to the agreed terms. |
+| Deal | One finalized property transaction created from a converted enquiry. Deal and payment screens are not yet available. |
+| Brokerage payment | One actual collection recorded against a deal. It is not an invoice or a promise to pay, and the database keeps payment history append-only. |
 | BHK | Bedrooms, hall and kitchen; 2 BHK means two bedrooms. |
 | UDS | An apartment's undivided share of land, if supplied. |
 | Built-up area | Stated constructed area, generally including walls. |
@@ -341,6 +351,7 @@ flowchart TD
 - Property counts include any sample properties stored in the catalogue; confirm which records are real before relying on the figures.
 - Demo enquiries are labeled and read-only; do not treat them as real customer requests. A customer derived only from seeded demo enquiries is also read-only, while a customer with any real enquiry can be edited.
 - Customer records are matched by phone number only. Two customers are not merged automatically, and an ambiguous number is not guessed; correct a phone number in **Customers** if needed. The customer database changes require disposable-database and staging verification before you rely on them in a live environment.
+- Closed deals and brokerage collections have a database foundation only. There is no deal or payment screen, invoice, GST/tax handling, bank integration, financial dashboard or deal notification. Payments are append-only and cannot be corrected or deleted in the current design; cancellation is possible only before payment and cannot be reopened. The brokerage migration has not been applied or verified against a deployed database in this repository state.
 - Contact details must be configured correctly before customers can rely on the phone, email or optional WhatsApp links.
 - The site does not offer a customer appointment calendar, saved-property account, external notification alerts or a property-delete control in the described workflows.
 
